@@ -1,0 +1,625 @@
+/*------------------------------------------------------------------------------
+Copyright 2024 Munich Quantum Software Stack Project
+
+Licensed under the Apache License, Version 2.0 with LLVM Exceptions (the
+"License"); you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+https://github.com/Munich-Quantum-Software-Stack/QDMI/blob/develop/LICENSE
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+License for the specific language governing permissions and limitations under
+the License.
+
+SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+------------------------------------------------------------------------------*/
+
+/** @file
+ * @brief A template of a device implementation in C++.
+ * @details In the end, all QDMI_ERROR_NOTIMPLEMENTED return codes should be
+ * replaced by proper return codes.
+ * For the documentation of the functions, see the official documentation.
+ */
+
+#include "maestro_qdmi/device.h"
+
+#ifdef __cplusplus
+#include <cstddef>
+#else
+#include <stddef.h>
+#endif
+
+ // The following line ignores the unused parameters in the functions.
+ // Please remove the following code block after populating the functions.
+ // NOLINTBEGIN(misc-unused-parameters,clang-diagnostic-unused-parameter)
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
+#elif defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#endif
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <complex>
+#include <cstdint>
+#include <cstring>
+#include <functional>
+#include <iterator>
+#include <limits>
+#include <map>
+#include <random>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+enum class MAESTRO_QDMI_DEVICE_SESSION_STATUS : uint8_t { ALLOCATED, INITIALIZED };
+
+/**
+ * @brief Implementation of the MAESTRO_QDMI_Device_Session structure.
+ * @details This structure can, e.g., be used to store a token to access an API.
+ */
+struct MAESTRO_QDMI_Device_Session_impl_d {
+	std::string token;
+	MAESTRO_QDMI_DEVICE_SESSION_STATUS status =
+		MAESTRO_QDMI_DEVICE_SESSION_STATUS::ALLOCATED;
+	int qubits_num = 16; // some reasonable default value
+};
+
+/**
+ * @brief Implementation of the MAESTRO_QDMI_Device_Job structure.
+ * @details This structure can, e.g., be used to store the job id.
+ */
+struct MAESTRO_QDMI_Device_Job_impl_d {
+	MAESTRO_QDMI_Device_Session session = nullptr;
+	int id = 0;
+	QDMI_Program_Format format = QDMI_PROGRAM_FORMAT_MAX;
+	void* program = nullptr;
+	QDMI_Job_Status status = QDMI_JOB_STATUS_SUBMITTED;
+	size_t num_shots = 0;
+	int qubits_num = 16;
+	//std::vector<std::string> results;
+	//std::vector<std::complex<double>> state_vec;
+};
+
+struct MAESTRO_QDMI_Device_State {
+	QDMI_Device_Status status = QDMI_DEVICE_STATUS_OFFLINE;
+	std::mt19937 gen{ 80333 }; // Seeded with a constant for reproducibility
+	std::uniform_int_distribution<> dis =
+		std::uniform_int_distribution<>(0, std::numeric_limits<int>::max());
+	std::bernoulli_distribution dis_bin{ 0.5 };
+	std::uniform_real_distribution<> dis_real =
+		std::uniform_real_distribution<>(-1.0, 1.0);
+	int job_id = 0;
+};
+
+/**
+ * @brief Implementation of the MAESTRO_QDMI_Site structure.
+ * @details This structure can, e.g., be used to store the site id.
+ */
+struct MAESTRO_QDMI_Site_impl_d {
+	size_t id;
+};
+
+/**
+ * @brief Implementation of the MAESTRO_QDMI_Operation structure.
+ * @details This structure can, e.g., be used to store the operation id.
+ */
+struct MAESTRO_QDMI_Operation_impl_d {
+	std::string name;
+};
+
+
+namespace {
+	/**
+	 * @brief Static function to maintain the device state.
+	 * @return a pointer to the device state.
+	 * @note This function is considered private and should not be used outside of
+	 * this file. Hence, it is not part of any header file.
+	 */
+	MAESTRO_QDMI_Device_State* MAESTRO_QDMI_get_device_state() {
+		static MAESTRO_QDMI_Device_State device_state;
+		return &device_state;
+	}
+
+	/**
+	 * @brief Local function to read the device status.
+	 * @return the current device status.
+	 * @note This function is considered private and should not be used outside of
+	 * this file. Hence, it is not part of any header file.
+	 */
+	QDMI_Device_Status MAESTRO_QDMI_get_device_status() {
+		return MAESTRO_QDMI_get_device_state()->status;
+	}
+
+	/**
+	 * @brief Local function to set the device status.
+	 * @param status the new device status.
+	 * @note This function is considered private and should not be used outside of
+	 * this file. Hence, it is not part of any header file.
+	 */
+	void MAESTRO_QDMI_set_device_status(QDMI_Device_Status status) {
+		MAESTRO_QDMI_get_device_state()->status = status;
+	}
+
+	/**
+	 * @brief Generate a random job id.
+	 * @return a random job id.
+	 * @note This function is considered private and should not be used outside of
+	 * this file. Hence, it is not part of any header file.
+	 */
+	int MAESTRO_QDMI_generate_job_id() {
+		auto* state = MAESTRO_QDMI_get_device_state();
+		return state->job_id++;
+	}
+
+	/**
+	 * @brief Generate a random bit.
+	 * @return a random bit.
+	 * @note This function is considered private and should not be used outside of
+	 * this file. Hence, it is not part of any header file.
+	 */
+	bool MAESTRO_QDMI_generate_bit() {
+		auto* state = MAESTRO_QDMI_get_device_state();
+		return state->dis_bin(state->gen);
+	}
+
+	/**
+	 * @brief Generate a random real number.
+	 * @return a random real number.
+	 * @note This function is considered private and should not be used outside of
+	 * this file. Hence, it is not part of any header file.
+	 */
+	double MAESTRO_QDMI_generate_real() {
+		auto* state = MAESTRO_QDMI_get_device_state();
+		return state->dis_real(state->gen);
+	}
+
+} // namespace
+
+// NOLINTBEGIN(bugprone-macro-parentheses)
+#define ADD_SINGLE_VALUE_PROPERTY(prop_name, prop_type, prop_value, prop,      \
+                                  size, value, size_ret)                       \
+  {                                                                            \
+    if ((prop) == (prop_name)) {                                               \
+      if ((value) != nullptr) {                                                \
+        if ((size) < sizeof(prop_type)) {                                      \
+          return QDMI_ERROR_INVALIDARGUMENT;                                   \
+        }                                                                      \
+        *static_cast<prop_type *>(value) = prop_value;                         \
+      }                                                                        \
+      if ((size_ret) != nullptr) {                                             \
+        *size_ret = sizeof(prop_type);                                         \
+      }                                                                        \
+      return QDMI_SUCCESS;                                                     \
+    }                                                                          \
+  } /// [DOXYGEN MACRO END]
+
+#define ADD_STRING_PROPERTY(prop_name, prop_value, prop, size, value,          \
+                            size_ret)                                          \
+  {                                                                            \
+    if ((prop) == (prop_name)) {                                               \
+      if ((value) != nullptr) {                                                \
+        if ((size) < strlen(prop_value) + 1) {                                 \
+          return QDMI_ERROR_INVALIDARGUMENT;                                   \
+        }                                                                      \
+        strncpy(static_cast<char *>(value), prop_value, size);                 \
+        static_cast<char *>(value)[size - 1] = '\0';                           \
+      }                                                                        \
+      if ((size_ret) != nullptr) {                                             \
+        *size_ret = strlen(prop_value) + 1;                                    \
+      }                                                                        \
+      return QDMI_SUCCESS;                                                     \
+    }                                                                          \
+  } /// [DOXYGEN MACRO END]
+
+#define ADD_LIST_PROPERTY(prop_name, prop_type, prop_values, prop, size,       \
+                          value, size_ret)                                     \
+  {                                                                            \
+    if ((prop) == (prop_name)) {                                               \
+      if ((value) != nullptr) {                                                \
+        if ((size) < (prop_values).size() * sizeof(prop_type)) {               \
+          return QDMI_ERROR_INVALIDARGUMENT;                                   \
+        }                                                                      \
+        memcpy(static_cast<void *>(value),                                     \
+               static_cast<const void *>((prop_values).data()),                \
+               (prop_values).size() * sizeof(prop_type));                      \
+      }                                                                        \
+      if ((size_ret) != nullptr) {                                             \
+        *size_ret = (prop_values).size() * sizeof(prop_type);                  \
+      }                                                                        \
+      return QDMI_SUCCESS;                                                     \
+    }                                                                          \
+  } /// [DOXYGEN MACRO END]
+// NOLINTEND(bugprone-macro-parentheses)
+
+
+int MAESTRO_QDMI_device_initialize() {
+	MAESTRO_QDMI_set_device_status(QDMI_DEVICE_STATUS_IDLE);
+	return QDMI_SUCCESS;
+} /// [DOXYGEN FUNCTION END]
+
+int MAESTRO_QDMI_device_finalize() {
+	MAESTRO_QDMI_set_device_status(QDMI_DEVICE_STATUS_OFFLINE);
+	return QDMI_SUCCESS;
+} /// [DOXYGEN FUNCTION END]
+
+int MAESTRO_QDMI_device_session_alloc(MAESTRO_QDMI_Device_Session* session) {
+	if (session == nullptr) {
+		return QDMI_ERROR_INVALIDARGUMENT;
+	}
+	*session = new MAESTRO_QDMI_Device_Session_impl_d();
+	return QDMI_SUCCESS;
+} /// [DOXYGEN FUNCTION END]
+
+int MAESTRO_QDMI_device_session_init(MAESTRO_QDMI_Device_Session session) {
+	if (session == nullptr) {
+		return QDMI_ERROR_INVALIDARGUMENT;
+	}
+	switch (MAESTRO_QDMI_get_device_status()) {
+	case QDMI_DEVICE_STATUS_ERROR:
+	case QDMI_DEVICE_STATUS_OFFLINE:
+	case QDMI_DEVICE_STATUS_MAINTENANCE:
+		return QDMI_ERROR_FATAL;
+	default:
+		break;
+	}
+	if (session->token.empty()) {
+		return QDMI_ERROR_PERMISSIONDENIED;
+	}
+	session->status = MAESTRO_QDMI_DEVICE_SESSION_STATUS::INITIALIZED;
+	return QDMI_SUCCESS;
+} /// [DOXYGEN FUNCTION END]
+
+void MAESTRO_QDMI_device_session_free(MAESTRO_QDMI_Device_Session session) {
+	delete session;
+} /// [DOXYGEN FUNCTION END]
+
+int MAESTRO_QDMI_device_session_set_parameter(MAESTRO_QDMI_Device_Session session,
+	QDMI_Device_Session_Parameter param,
+	const size_t size, const void* value) {
+	if (session == nullptr || (value != nullptr && size == 0) ||
+		(param >= QDMI_DEVICE_SESSION_PARAMETER_MAX &&
+			param != QDMI_DEVICE_SESSION_PARAMETER_CUSTOM1 &&
+			param != QDMI_DEVICE_SESSION_PARAMETER_CUSTOM2 &&
+			param != QDMI_DEVICE_SESSION_PARAMETER_CUSTOM3 &&
+			param != QDMI_DEVICE_SESSION_PARAMETER_CUSTOM4 &&
+			param != QDMI_DEVICE_SESSION_PARAMETER_CUSTOM5)) {
+		return QDMI_ERROR_INVALIDARGUMENT;
+	}
+	if (session->status != MAESTRO_QDMI_DEVICE_SESSION_STATUS::ALLOCATED) {
+		return QDMI_ERROR_BADSTATE;
+	}
+	if (param != QDMI_DEVICE_SESSION_PARAMETER_TOKEN || param != QDMI_DEVICE_SESSION_PARAMETER_CUSTOM1) {
+		return QDMI_ERROR_NOTSUPPORTED;
+	}
+	if (value != nullptr) {
+		if (param == QDMI_DEVICE_SESSION_PARAMETER_TOKEN)
+			session->token = std::string(static_cast<const char*>(value), size);
+		else if (param == QDMI_DEVICE_SESSION_PARAMETER_CUSTOM1)
+			session->qubits_num = *static_cast<const int*>(value);
+	}
+	return QDMI_SUCCESS;
+} /// [DOXYGEN FUNCTION END]
+
+int MAESTRO_QDMI_device_session_create_device_job(MAESTRO_QDMI_Device_Session session,
+	MAESTRO_QDMI_Device_Job* job) {
+	if (session == nullptr || job == nullptr) {
+		return QDMI_ERROR_INVALIDARGUMENT;
+	}
+	if (session->status != MAESTRO_QDMI_DEVICE_SESSION_STATUS::INITIALIZED) {
+		return QDMI_ERROR_BADSTATE;
+	}
+
+	*job = new MAESTRO_QDMI_Device_Job_impl_d;
+	(*job)->session = session;
+	// set job id to random number for demonstration purposes
+	(*job)->id = MAESTRO_QDMI_generate_job_id();
+	(*job)->status = QDMI_JOB_STATUS_CREATED;
+	(*job)->qubits_num = session->qubits_num;
+	return QDMI_SUCCESS;
+} /// [DOXYGEN FUNCTION END]
+
+void MAESTRO_QDMI_device_job_free(MAESTRO_QDMI_Device_Job job) {
+	delete[] static_cast<char*>(job->program);
+	delete job;
+} /// [DOXYGEN FUNCTION END]
+
+int MAESTRO_QDMI_device_job_set_parameter(MAESTRO_QDMI_Device_Job job,
+	const QDMI_Device_Job_Parameter param,
+	const size_t size, const void* value) {
+	if (job == nullptr || (value != nullptr && size == 0) ||
+		(param >= QDMI_DEVICE_JOB_PARAMETER_MAX &&
+			param != QDMI_DEVICE_JOB_PARAMETER_CUSTOM1 &&
+			param != QDMI_DEVICE_JOB_PARAMETER_CUSTOM2 &&
+			param != QDMI_DEVICE_JOB_PARAMETER_CUSTOM3 &&
+			param != QDMI_DEVICE_JOB_PARAMETER_CUSTOM4 &&
+			param != QDMI_DEVICE_JOB_PARAMETER_CUSTOM5)) {
+		return QDMI_ERROR_INVALIDARGUMENT;
+	}
+	if (job->status != QDMI_JOB_STATUS_CREATED) {
+		return QDMI_ERROR_BADSTATE;
+	}
+	switch (param) {
+	case QDMI_DEVICE_JOB_PARAMETER_PROGRAMFORMAT:
+		if (value != nullptr) {
+			const auto format = *static_cast<const QDMI_Program_Format*>(value);
+			if (format >= QDMI_PROGRAM_FORMAT_MAX &&
+				format != QDMI_PROGRAM_FORMAT_CUSTOM1 &&
+				format != QDMI_PROGRAM_FORMAT_CUSTOM2 &&
+				format != QDMI_PROGRAM_FORMAT_CUSTOM3 &&
+				format != QDMI_PROGRAM_FORMAT_CUSTOM4 &&
+				format != QDMI_PROGRAM_FORMAT_CUSTOM5) {
+				return QDMI_ERROR_INVALIDARGUMENT;
+			}
+			if (format != QDMI_PROGRAM_FORMAT_QASM2 &&
+				format != QDMI_PROGRAM_FORMAT_QIRBASESTRING &&
+				format != QDMI_PROGRAM_FORMAT_QIRBASEMODULE &&
+				format != QDMI_PROGRAM_FORMAT_CALIBRATION) {
+				return QDMI_ERROR_NOTSUPPORTED;
+			}
+			job->format = format;
+		}
+		return QDMI_SUCCESS;
+	case QDMI_DEVICE_JOB_PARAMETER_PROGRAM:
+		if (value != nullptr) {
+			job->program = new char[size];
+			memcpy(job->program, value, size);
+		}
+		return QDMI_SUCCESS;
+	case QDMI_DEVICE_JOB_PARAMETER_SHOTSNUM:
+		if (value != nullptr) {
+			job->num_shots = *static_cast<const size_t*>(value);
+		}
+		return QDMI_SUCCESS;
+	case QDMI_DEVICE_JOB_PARAMETER_CUSTOM1:
+		if (value != nullptr) {
+			job->qubits_num = *static_cast<const int*>(value);
+		}
+		return QDMI_SUCCESS;
+	default:
+		return QDMI_ERROR_NOTSUPPORTED;
+	}
+} /// [DOXYGEN FUNCTION END]
+
+int MAESTRO_QDMI_device_job_query_property(MAESTRO_QDMI_Device_Job job,
+	const QDMI_Device_Job_Property prop,
+	const size_t size, void* value,
+	size_t* size_ret) {
+	if (job == nullptr || (value != nullptr && size == 0) ||
+		(prop >= QDMI_DEVICE_JOB_PROPERTY_MAX &&
+			prop != QDMI_DEVICE_JOB_PROPERTY_CUSTOM1 &&
+			prop != QDMI_DEVICE_JOB_PROPERTY_CUSTOM2 &&
+			prop != QDMI_DEVICE_JOB_PROPERTY_CUSTOM3 &&
+			prop != QDMI_DEVICE_JOB_PROPERTY_CUSTOM4 &&
+			prop != QDMI_DEVICE_JOB_PROPERTY_CUSTOM5)) {
+		return QDMI_ERROR_INVALIDARGUMENT;
+	}
+	const auto str = std::to_string(job->id);
+	ADD_STRING_PROPERTY(QDMI_DEVICE_JOB_PROPERTY_ID, str.c_str(), prop, size,
+		value, size_ret);
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_JOB_PROPERTY_PROGRAMFORMAT,
+		QDMI_Program_Format, job->format, prop, size, value,
+		size_ret);
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_JOB_PROPERTY_SHOTSNUM, size_t,
+		job->num_shots, prop, size, value, size_ret);
+
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_JOB_PROPERTY_CUSTOM1, int,
+		job->qubits_num, prop, size, value, size_ret);
+
+	return QDMI_ERROR_NOTSUPPORTED;
+} /// [DOXYGEN FUNCTION END]
+
+int MAESTRO_QDMI_device_job_submit(MAESTRO_QDMI_Device_Job job) {
+	return QDMI_ERROR_NOTIMPLEMENTED;
+}
+
+int MAESTRO_QDMI_device_job_cancel(MAESTRO_QDMI_Device_Job job) {
+	if (job == nullptr || job->status == QDMI_JOB_STATUS_DONE) {
+		return QDMI_ERROR_INVALIDARGUMENT;
+	}
+
+	job->status = QDMI_JOB_STATUS_CANCELED;
+	MAESTRO_QDMI_set_device_status(QDMI_DEVICE_STATUS_IDLE);
+	return QDMI_SUCCESS;
+} /// [DOXYGEN FUNCTION END]
+
+int MAESTRO_QDMI_device_job_check(MAESTRO_QDMI_Device_Job job, QDMI_Job_Status* status) {
+	if (job == nullptr || status == nullptr) {
+		return QDMI_ERROR_INVALIDARGUMENT;
+	}
+	// randomly decide whether job is done or not
+	if (job->status == QDMI_JOB_STATUS_RUNNING && MAESTRO_QDMI_generate_bit()) {
+		MAESTRO_QDMI_set_device_status(QDMI_DEVICE_STATUS_IDLE);
+		job->status = QDMI_JOB_STATUS_DONE;
+	}
+	*status = job->status;
+	return QDMI_SUCCESS;
+} /// [DOXYGEN FUNCTION END]
+
+int MAESTRO_QDMI_device_job_wait(MAESTRO_QDMI_Device_Job job, const size_t timeout) {
+	if (job == nullptr) {
+		return QDMI_ERROR_INVALIDARGUMENT;
+	}
+	job->status = QDMI_JOB_STATUS_DONE;
+	MAESTRO_QDMI_set_device_status(QDMI_DEVICE_STATUS_IDLE);
+	return QDMI_SUCCESS;
+} /// [DOXYGEN FUNCTION END]
+
+int MAESTRO_QDMI_device_job_get_results(MAESTRO_QDMI_Device_Job job,
+	QDMI_Job_Result result, const size_t size,
+	void* data, size_t* size_ret) {
+	return QDMI_ERROR_NOTIMPLEMENTED;
+}
+
+int MAESTRO_QDMI_device_session_query_device_property(
+	MAESTRO_QDMI_Device_Session session, const QDMI_Device_Property prop,
+	const size_t size, void* value, size_t* size_ret) {
+	if (session == nullptr || (value != nullptr && size == 0) ||
+		(prop >= QDMI_DEVICE_PROPERTY_MAX &&
+			prop != QDMI_DEVICE_PROPERTY_CUSTOM1 &&
+			prop != QDMI_DEVICE_PROPERTY_CUSTOM2 &&
+			prop != QDMI_DEVICE_PROPERTY_CUSTOM3 &&
+			prop != QDMI_DEVICE_PROPERTY_CUSTOM4 &&
+			prop != QDMI_DEVICE_PROPERTY_CUSTOM5)) {
+		return QDMI_ERROR_INVALIDARGUMENT;
+	}
+	if (session->status != MAESTRO_QDMI_DEVICE_SESSION_STATUS::INITIALIZED) {
+		return QDMI_ERROR_BADSTATE;
+	}
+	ADD_STRING_PROPERTY(QDMI_DEVICE_PROPERTY_NAME, "Maestro Device",
+		prop, size, value, size_ret);
+	ADD_STRING_PROPERTY(QDMI_DEVICE_PROPERTY_VERSION, "0.1.0", prop, size, value,
+		size_ret);
+	ADD_STRING_PROPERTY(QDMI_DEVICE_PROPERTY_LIBRARYVERSION, "1.1.0", prop, size,
+		value, size_ret);
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_PROPERTY_STATUS, QDMI_Device_Status,
+		MAESTRO_QDMI_get_device_status(), prop, size, value,
+		size_ret);
+
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_PROPERTY_QUBITSNUM, int, session->qubits_num, prop,
+		size, value, size_ret);
+	//        ADD_LIST_PROPERTY(QDMI_DEVICE_PROPERTY_SITES, MAESTRO_QDMI_Site, MAESTRO_DEVICE_SITES,
+	//            prop, size, value, size_ret);
+	//        ADD_LIST_PROPERTY(QDMI_DEVICE_PROPERTY_OPERATIONS, MAESTRO_QDMI_Operation,
+	//            MAESTRO_DEVICE_OPERATIONS, prop, size, value, size_ret);
+	//        ADD_LIST_PROPERTY(QDMI_DEVICE_PROPERTY_COUPLINGMAP, MAESTRO_QDMI_Site,
+	//            DEVICE_COUPLING_MAP, prop, size, value, size_ret);
+
+	// The example device never requires calibration
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_PROPERTY_NEEDSCALIBRATION, size_t, 0,
+		prop, size, value, size_ret);
+
+	ADD_SINGLE_VALUE_PROPERTY(
+		QDMI_DEVICE_PROPERTY_PULSESUPPORT, QDMI_Device_Pulse_Support_Level,
+		QDMI_DEVICE_PULSE_SUPPORT_LEVEL_NONE, prop, size, value, size_ret);
+
+	ADD_STRING_PROPERTY(QDMI_DEVICE_PROPERTY_LENGTHUNIT, "um", prop, size, value,
+		size_ret);
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_PROPERTY_LENGTHSCALEFACTOR, double, 1.0,
+		prop, size, value, size_ret);
+
+	ADD_STRING_PROPERTY(QDMI_DEVICE_PROPERTY_DURATIONUNIT, "us", prop, size,
+		value, size_ret);
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_PROPERTY_DURATIONSCALEFACTOR, double,
+		0.001, prop, size, value, size_ret);
+
+	return QDMI_ERROR_NOTSUPPORTED;
+} /// [DOXYGEN FUNCTION END]
+
+int MAESTRO_QDMI_device_session_query_site_property(MAESTRO_QDMI_Device_Session session,
+	MAESTRO_QDMI_Site site,
+	const QDMI_Site_Property prop,
+	const size_t size, void* value,
+	size_t* size_ret) {
+	if (session == nullptr || site == nullptr ||
+		(value != nullptr && size == 0) ||
+		(prop >= QDMI_SITE_PROPERTY_MAX && prop != QDMI_SITE_PROPERTY_CUSTOM1 &&
+			prop != QDMI_SITE_PROPERTY_CUSTOM2 &&
+			prop != QDMI_SITE_PROPERTY_CUSTOM3 &&
+			prop != QDMI_SITE_PROPERTY_CUSTOM4 &&
+			prop != QDMI_SITE_PROPERTY_CUSTOM5)) {
+		return QDMI_ERROR_INVALIDARGUMENT;
+	}
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_SITE_PROPERTY_INDEX, uint64_t, site->id, prop,
+		size, value, size_ret);
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_SITE_PROPERTY_MODULEINDEX, uint64_t, 0, prop,
+		size, value, size_ret);
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_SITE_PROPERTY_T1, uint64_t, 1000000U, prop,
+		size, value, size_ret);
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_SITE_PROPERTY_T2, uint64_t, 100000000U, prop,
+		size, value, size_ret);
+	return QDMI_ERROR_NOTSUPPORTED;
+} /// [DOXYGEN FUNCTION END]
+
+int MAESTRO_QDMI_device_session_query_operation_property(
+	MAESTRO_QDMI_Device_Session session, MAESTRO_QDMI_Operation operation,
+	const size_t num_sites, const MAESTRO_QDMI_Site* sites, const size_t num_params,
+	const double* params, const QDMI_Operation_Property prop, const size_t size,
+	void* value, size_t* size_ret) {
+	if (session == nullptr || operation == nullptr ||
+		(sites != nullptr && num_sites == 0) ||
+		(params != nullptr && num_params == 0) ||
+		(value != nullptr && size == 0) ||
+		(prop >= QDMI_OPERATION_PROPERTY_MAX &&
+			prop != QDMI_OPERATION_PROPERTY_CUSTOM1 &&
+			prop != QDMI_OPERATION_PROPERTY_CUSTOM2 &&
+			prop != QDMI_OPERATION_PROPERTY_CUSTOM3 &&
+			prop != QDMI_OPERATION_PROPERTY_CUSTOM4 &&
+			prop != QDMI_OPERATION_PROPERTY_CUSTOM5)) {
+		return QDMI_ERROR_INVALIDARGUMENT;
+	}
+	// General properties
+	//ADD_STRING_PROPERTY(QDMI_OPERATION_PROPERTY_NAME,
+	//	OPERATION_PROPERTIES.at(operation).first.c_str(), prop,
+	//	size, value, size_ret);
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_OPERATION_PROPERTY_ISZONED, bool, false, prop,
+		size, value, size_ret);
+	/*
+	if (operation == MAESTRO_DEVICE_OPERATIONS[3]) {
+		if (sites != nullptr && num_sites != 2) {
+			return QDMI_ERROR_INVALIDARGUMENT;
+		}
+		ADD_SINGLE_VALUE_PROPERTY(QDMI_OPERATION_PROPERTY_PARAMETERSNUM, size_t, 0,
+			prop, size, value, size_ret);
+		ADD_SINGLE_VALUE_PROPERTY(QDMI_OPERATION_PROPERTY_DURATION, uint64_t,
+			OPERATION_PROPERTIES.at(operation).second, prop,
+			size, value, size_ret);
+		ADD_LIST_PROPERTY(QDMI_OPERATION_PROPERTY_SITES, MAESTRO_QDMI_Site,
+			DEVICE_COUPLING_MAP, prop, size, value, size_ret);
+		if (sites == nullptr) {
+			ADD_SINGLE_VALUE_PROPERTY(QDMI_OPERATION_PROPERTY_QUBITSNUM, size_t, 2,
+				prop, size, value, size_ret);
+			return QDMI_ERROR_NOTSUPPORTED;
+		}
+
+		const std::pair site_pair = { sites[0], sites[1] };
+		if (site_pair.first == site_pair.second) {
+			return QDMI_ERROR_INVALIDARGUMENT;
+		}
+		const auto it = OPERATION_FIDELITIES.find(operation);
+		if (it == OPERATION_FIDELITIES.end()) {
+			return QDMI_ERROR_INVALIDARGUMENT;
+		}
+		const auto fit = it->second.find(site_pair);
+		if (fit == it->second.end()) {
+			return QDMI_ERROR_INVALIDARGUMENT;
+		}
+		ADD_SINGLE_VALUE_PROPERTY(QDMI_OPERATION_PROPERTY_FIDELITY, double,
+			fit->second, prop, size, value, size_ret);
+	}
+	else if (operation == MAESTRO_DEVICE_OPERATIONS[0] ||
+		operation == MAESTRO_DEVICE_OPERATIONS[1] ||
+		operation == MAESTRO_DEVICE_OPERATIONS[2]) {
+		if ((sites != nullptr && num_sites != 1) ||
+			(params != nullptr && num_params != 1)) {
+			return QDMI_ERROR_INVALIDARGUMENT;
+		}
+		ADD_SINGLE_VALUE_PROPERTY(QDMI_OPERATION_PROPERTY_DURATION, double, 0.01,
+			prop, size, value, size_ret);
+		ADD_SINGLE_VALUE_PROPERTY(QDMI_OPERATION_PROPERTY_QUBITSNUM, size_t, 1,
+			prop, size, value, size_ret);
+		ADD_SINGLE_VALUE_PROPERTY(QDMI_OPERATION_PROPERTY_PARAMETERSNUM, size_t, 1,
+			prop, size, value, size_ret);
+		ADD_SINGLE_VALUE_PROPERTY(QDMI_OPERATION_PROPERTY_FIDELITY, double, 1,
+			prop, size, value, size_ret);
+		ADD_LIST_PROPERTY(QDMI_OPERATION_PROPERTY_SITES, MAESTRO_QDMI_Site,
+			MAESTRO_DEVICE_SITES, prop, size, value, size_ret);
+	}
+	*/
+	return QDMI_ERROR_NOTSUPPORTED;
+} /// [DOXYGEN FUNCTION END]
+
+// The following line ignores the unused parameters in the functions.
+// Please remove the following code block after populating the functions.
+// NOLINTEND(misc-unused-parameters,clang-diagnostic-unused-parameter)
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#elif defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
