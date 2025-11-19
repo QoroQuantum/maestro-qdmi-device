@@ -24,10 +24,10 @@ option(CXX_DEVICE "Build a C++ device" ON)
 set(QDMI_PREFIX "MAESTRO")
 
 project(
-  MyDevice
+  MaestroDevice
   LANGUAGES C
   VERSION 0.0.1
-  DESCRIPTION "My QDMI Device Implementation")
+  DESCRIPTION "Maestro QDMI Device Implementation")
 
 if(CXX_DEVICE)
   enable_language(CXX)
@@ -43,7 +43,7 @@ else()
   set(MAESTRO_DEVICE_MASTER_PROJECT OFF)
 endif()
 
-option(BUILD_MAESTRO_DEVICE_TESTS "Build tests for MyDevice"
+option(BUILD_MAESTRO_DEVICE_TESTS "Build tests for MaestroDevice"
        ${MAESTRO_DEVICE_MASTER_PROJECT})
 
 include(cmake/ExternalDependencies.cmake)
