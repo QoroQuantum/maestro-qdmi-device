@@ -57,6 +57,9 @@ SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <atomic>
+#include <mutex>
+#include <thread>
 
 
 #include "Simulator.hpp"
@@ -71,6 +74,10 @@ struct MAESTRO_QDMI_Device_Session_impl_d {
 	std::string token;
 	MAESTRO_QDMI_DEVICE_SESSION_STATUS status = MAESTRO_QDMI_DEVICE_SESSION_STATUS::ALLOCATED;
 	int qubits_num = 64; // some reasonable default value
+
+	int simType = 0; // 0 - aer, 1 - qcsim, 2, - composite aer, 3 - composite qcsim, 2 - gpu, any other value = whatever, auto if available
+	int simExecType = 0; // 0 - statevector, 1 - mps, 2 - stabilizer, 3 - tensor network, any other value = whatever, auto if available
+	int maxBondDim = 0; // no limit
 };
 
 /**
@@ -78,26 +85,156 @@ struct MAESTRO_QDMI_Device_Session_impl_d {
  * @details This structure can, e.g., be used to store the job id.
  */
 struct MAESTRO_QDMI_Device_Job_impl_d {
+	~MAESTRO_QDMI_Device_Job_impl_d()
+	{
+		delete[] program;
+	}
+
+	std::string GetConfigJson() const
+	{
+		std::string config = "{\"shots\": ";
+
+		config += std::to_string(num_shots);
+
+		if (maxBondDim != 0)
+			config += ", \"matrix_product_state_max_bond_dimension\": " + std::to_string(maxBondDim);
+
+		config += "}";
+
+		return config;
+	}
+
+	// very dumb json parser, but we know exactly what to expect
+	void ParseResults(const std::string& res)
+	{
+		// we care only about 'counts' for now
+		auto pos = res.find("\"counts\":");
+		if (pos == std::string::npos)
+			return;
+
+		results.clear();
+
+		pos += 9;
+		while (pos < res.length() && res[pos] != '{')
+			++pos;
+
+		++pos; // skip '{'
+
+		std::string key;
+		std::string value;
+		while (pos < res.length() && res[pos] != '}')
+		{
+			if (res[pos] == '"')
+			{
+				++pos;
+				key.clear();
+				while (pos < res.length() && res[pos] != '"')
+				{
+					key += res[pos];
+					++pos;
+				}
+				++pos; // skip '"'
+			}
+			else if (res[pos] == ':')
+			{
+				++pos; // skip ':'
+				while (pos < res.length() && (res[pos] == ' ' || res[pos] == '\n'))
+					++pos;
+				value.clear();
+				while (pos < res.length() && isdigit(res[pos]))
+				{
+					value += res[pos];
+					++pos;
+				}
+				if (!key.empty() && !value.empty())
+				{
+					results[key] = static_cast<size_t>(std::stoull(value));
+				}
+			}
+			else
+			{
+				++pos;
+			}
+		}
+	}
+
 	MAESTRO_QDMI_Device_Session session = nullptr;
 	int id = 0;
 	QDMI_Program_Format format = QDMI_PROGRAM_FORMAT_QASM2;
-	void* program = nullptr;
-	QDMI_Job_Status status = QDMI_JOB_STATUS_SUBMITTED;
-	size_t num_shots = 0;
+	char* program = nullptr;
+
+	std::atomic<QDMI_Job_Status> status{ QDMI_JOB_STATUS_SUBMITTED };
+	size_t num_shots = 1;
 	int qubits_num = 64;
-	//std::vector<std::string> results;
-	//std::vector<std::complex<double>> state_vec;
+
+	int simType = 0; // 0 - aer, 1 - qcsim, 2, - composite aer, 3 - composite qcsim, 2 - gpu, any other value = whatever, auto if available
+	int simExecType = 0; // 0 - statevector, 1 - mps, 2 - stabilizer, 3 - tensor network, any other value = whatever, auto if available
+	int maxBondDim = 0; // no limit
+
+	std::unordered_map<std::string, size_t> results;
 };
 
 struct MAESTRO_QDMI_Device_State {
+	SimpleSimulator simulator;
+	bool simulator_initialized{ false };
+	std::atomic_bool simulator_busy{ false };
+	std::mutex simulator_mutex;
+
+	// TODO: implement a thread that takes jobs from the queue and executes them
+	// set the status QDMI_DEVICE_STATUS_IDLE if there are no more jobs to be executed
+	// and QDMI_DEVICE_STATUS_BUSY if there are jobs being executed
+
+	void Initialize()
+	{
+		std::lock_guard<std::mutex> lock(simulator_mutex);
+		if (!simulator_initialized)
+		{
+			simulator.Init("maestro.so");
+			simulator_initialized = true;
+		}
+	}
+
+	void CancelJob(MAESTRO_QDMI_Device_Job job)
+	{
+		std::lock_guard<std::mutex> lock(simulator_mutex);
+		auto it = jobs.find(job->id);
+		if (it != jobs.end())
+			jobs.erase(it);
+			
+		job->status = QDMI_JOB_STATUS_CANCELED;
+
+		if (current_job == job)
+			current_job = nullptr;
+	}
+
+	void RemoveJob(MAESTRO_QDMI_Device_Job job)
+	{
+		CancelJob(job);
+
+		delete job;
+	}
+
+	void AddJob(MAESTRO_QDMI_Device_Job job)
+	{
+		std::lock_guard<std::mutex> lock(simulator_mutex);
+		jobs[job->id] = job;
+		job->status = QDMI_JOB_STATUS_QUEUED;
+	}
+
 	QDMI_Device_Status status = QDMI_DEVICE_STATUS_OFFLINE;
+	std::atomic<int> job_id{ 0 };
+
+	// acts as a queue for submitted jobs, allows cancelling if they are not started yet
+	std::map<int, MAESTRO_QDMI_Device_Job> jobs;
+	MAESTRO_QDMI_Device_Job current_job{ nullptr };
+
+
 	std::mt19937 gen{ 80333 }; // Seeded with a constant for reproducibility
 	std::uniform_int_distribution<> dis =
 		std::uniform_int_distribution<>(0, std::numeric_limits<int>::max());
 	std::bernoulli_distribution dis_bin{ 0.5 };
 	std::uniform_real_distribution<> dis_real =
 		std::uniform_real_distribution<>(-1.0, 1.0);
-	int job_id = 0;
 };
 
 /**
@@ -118,6 +255,52 @@ struct MAESTRO_QDMI_Operation_impl_d {
 
 
 namespace {
+	int MAESTRO_QDMI_device_job_get_results_hist(MAESTRO_QDMI_Device_Job job,
+		const QDMI_Job_Result result,
+		const size_t size, void* data,
+		size_t* size_ret) {
+		const auto& hist = job->results;
+
+		if (result == QDMI_JOB_RESULT_HIST_KEYS) {
+			const size_t bitstring_size =
+				hist.empty() ? 0 : hist.begin()->first.length();
+
+			const size_t req_size = hist.size() * (bitstring_size + 1);
+			if (size_ret != nullptr) {
+				*size_ret = req_size;
+			}
+			if (data != nullptr) {
+				if (size < req_size) {
+					return QDMI_ERROR_INVALIDARGUMENT;
+				}
+				char* data_ptr = static_cast<char*>(data);
+				for (const auto& [bitstring, count] : hist) {
+					std::copy(bitstring.begin(), bitstring.end(), data_ptr);
+					data_ptr += bitstring.length();
+					*data_ptr++ = ',';
+				}
+				*(data_ptr - 1) = '\0'; // Replace last comma with null terminator
+			}
+		}
+		else {
+			// case QDMI_JOB_RESULT_HIST_VALUES:
+			const size_t req_size = hist.size() * sizeof(size_t);
+			if (size_ret != nullptr) {
+				*size_ret = req_size;
+			}
+			if (data != nullptr) {
+				if (size < req_size) {
+					return QDMI_ERROR_INVALIDARGUMENT;
+				}
+				auto* data_ptr = static_cast<size_t*>(data);
+				for (const auto& [_, count] : hist) {
+					*data_ptr++ = count;
+				}
+			}
+		}
+		return QDMI_SUCCESS;
+	} /// [DOXYGEN FUNCTION END]
+
 	/**
 	 * @brief Static function to maintain the device state.
 	 * @return a pointer to the device state.
@@ -136,7 +319,10 @@ namespace {
 	 * this file. Hence, it is not part of any header file.
 	 */
 	QDMI_Device_Status MAESTRO_QDMI_get_device_status() {
-		return MAESTRO_QDMI_get_device_state()->status;
+		auto state = MAESTRO_QDMI_get_device_state();
+		std::lock_guard<std::mutex> lock(state->simulator_mutex);
+		auto status = state->status;
+		return status;
 	}
 
 	/**
@@ -146,7 +332,9 @@ namespace {
 	 * this file. Hence, it is not part of any header file.
 	 */
 	void MAESTRO_QDMI_set_device_status(QDMI_Device_Status status) {
-		MAESTRO_QDMI_get_device_state()->status = status;
+		auto state = MAESTRO_QDMI_get_device_state();
+		std::lock_guard<std::mutex> lock(state->simulator_mutex);
+		state->status = status;
 	}
 
 	/**
@@ -156,7 +344,7 @@ namespace {
 	 * this file. Hence, it is not part of any header file.
 	 */
 	int MAESTRO_QDMI_generate_job_id() {
-		auto* state = MAESTRO_QDMI_get_device_state();
+		auto state = MAESTRO_QDMI_get_device_state();
 		return state->job_id++;
 	}
 
@@ -167,7 +355,7 @@ namespace {
 	 * this file. Hence, it is not part of any header file.
 	 */
 	bool MAESTRO_QDMI_generate_bit() {
-		auto* state = MAESTRO_QDMI_get_device_state();
+		auto state = MAESTRO_QDMI_get_device_state();
 		return state->dis_bin(state->gen);
 	}
 
@@ -178,7 +366,7 @@ namespace {
 	 * this file. Hence, it is not part of any header file.
 	 */
 	double MAESTRO_QDMI_generate_real() {
-		auto* state = MAESTRO_QDMI_get_device_state();
+		auto state = MAESTRO_QDMI_get_device_state();
 		return state->dis_real(state->gen);
 	}
 
@@ -326,11 +514,13 @@ namespace {
 
 int MAESTRO_QDMI_device_initialize() {
 	MAESTRO_QDMI_set_device_status(QDMI_DEVICE_STATUS_IDLE);
+
 	return QDMI_SUCCESS;
 } /// [DOXYGEN FUNCTION END]
 
 int MAESTRO_QDMI_device_finalize() {
 	MAESTRO_QDMI_set_device_status(QDMI_DEVICE_STATUS_OFFLINE);
+	
 	return QDMI_SUCCESS;
 } /// [DOXYGEN FUNCTION END]
 
@@ -339,6 +529,7 @@ int MAESTRO_QDMI_device_session_alloc(MAESTRO_QDMI_Device_Session* session) {
 		return QDMI_ERROR_INVALIDARGUMENT;
 	}
 	*session = new MAESTRO_QDMI_Device_Session_impl_d();
+	
 	return QDMI_SUCCESS;
 } /// [DOXYGEN FUNCTION END]
 
@@ -358,6 +549,7 @@ int MAESTRO_QDMI_device_session_init(MAESTRO_QDMI_Device_Session session) {
 	//	return QDMI_ERROR_PERMISSIONDENIED;
 	//}
 	session->status = MAESTRO_QDMI_DEVICE_SESSION_STATUS::INITIALIZED;
+	
 	return QDMI_SUCCESS;
 } /// [DOXYGEN FUNCTION END]
 
@@ -380,7 +572,8 @@ int MAESTRO_QDMI_device_session_set_parameter(MAESTRO_QDMI_Device_Session sessio
 	if (session->status != MAESTRO_QDMI_DEVICE_SESSION_STATUS::ALLOCATED) {
 		return QDMI_ERROR_BADSTATE;
 	}
-	if (param != QDMI_DEVICE_SESSION_PARAMETER_TOKEN && param != QDMI_DEVICE_SESSION_PARAMETER_CUSTOM1) {
+	if (param != QDMI_DEVICE_SESSION_PARAMETER_TOKEN && param != QDMI_DEVICE_SESSION_PARAMETER_CUSTOM1
+		&& param != QDMI_DEVICE_SESSION_PARAMETER_CUSTOM2 && param != QDMI_DEVICE_SESSION_PARAMETER_CUSTOM3 && param != QDMI_DEVICE_SESSION_PARAMETER_CUSTOM4) {
 		return QDMI_ERROR_NOTSUPPORTED;
 	}
 	if (value != nullptr) {
@@ -388,7 +581,14 @@ int MAESTRO_QDMI_device_session_set_parameter(MAESTRO_QDMI_Device_Session sessio
 			session->token = std::string(static_cast<const char*>(value), size);
 		else if (param == QDMI_DEVICE_SESSION_PARAMETER_CUSTOM1)
 			session->qubits_num = *static_cast<const int*>(value);
+		else if (param == QDMI_DEVICE_SESSION_PARAMETER_CUSTOM2)
+			session->simType = *static_cast<const int*>(value);
+		else if (param == QDMI_DEVICE_SESSION_PARAMETER_CUSTOM3)
+			session->simExecType = *static_cast<const int*>(value);
+		else if (param == QDMI_DEVICE_SESSION_PARAMETER_CUSTOM4)
+			session->maxBondDim = *static_cast<const int*>(value);
 	}
+
 	return QDMI_SUCCESS;
 } /// [DOXYGEN FUNCTION END]
 
@@ -407,12 +607,21 @@ int MAESTRO_QDMI_device_session_create_device_job(MAESTRO_QDMI_Device_Session se
 	(*job)->id = MAESTRO_QDMI_generate_job_id();
 	(*job)->status = QDMI_JOB_STATUS_CREATED;
 	(*job)->qubits_num = session->qubits_num;
+
+	(*job)->simType = session->simType;
+	(*job)->simExecType = session->simExecType;
+	(*job)->maxBondDim = session->maxBondDim;
+
 	return QDMI_SUCCESS;
 } /// [DOXYGEN FUNCTION END]
 
 void MAESTRO_QDMI_device_job_free(MAESTRO_QDMI_Device_Job job) {
-	delete[] static_cast<char*>(job->program);
-	delete job;
+	if (job == nullptr) {
+		return;
+	}
+
+	auto state = MAESTRO_QDMI_get_device_state();
+	state->RemoveJob(job);
 } /// [DOXYGEN FUNCTION END]
 
 int MAESTRO_QDMI_device_job_set_parameter(MAESTRO_QDMI_Device_Job job,
@@ -450,8 +659,9 @@ int MAESTRO_QDMI_device_job_set_parameter(MAESTRO_QDMI_Device_Job job,
 		return QDMI_SUCCESS;
 	case QDMI_DEVICE_JOB_PARAMETER_PROGRAM:
 		if (value != nullptr) {
-			job->program = new char[size];
+			job->program = new char[size + 1];
 			memcpy(job->program, value, size);
+			job->program[size] = 0;
 		}
 		return QDMI_SUCCESS;
 	case QDMI_DEVICE_JOB_PARAMETER_SHOTSNUM:
@@ -464,9 +674,26 @@ int MAESTRO_QDMI_device_job_set_parameter(MAESTRO_QDMI_Device_Job job,
 			job->qubits_num = *static_cast<const int*>(value);
 		}
 		return QDMI_SUCCESS;
+	case QDMI_DEVICE_JOB_PARAMETER_CUSTOM2:
+		if (value != nullptr) {
+			job->simType = *static_cast<const int*>(value);
+		}
+		return QDMI_SUCCESS;
+	case QDMI_DEVICE_JOB_PARAMETER_CUSTOM3:
+		if (value != nullptr) {
+			job->simExecType = *static_cast<const int*>(value);
+		}
+		return QDMI_SUCCESS;
+	case QDMI_DEVICE_JOB_PARAMETER_CUSTOM4:
+		if (value != nullptr) {
+			job->maxBondDim = *static_cast<const int*>(value);
+		}
+		return QDMI_SUCCESS;
 	default:
-		return QDMI_ERROR_NOTSUPPORTED;
+		break;
 	}
+
+	return QDMI_ERROR_NOTSUPPORTED;
 } /// [DOXYGEN FUNCTION END]
 
 int MAESTRO_QDMI_device_job_query_property(MAESTRO_QDMI_Device_Job job,
@@ -494,11 +721,28 @@ int MAESTRO_QDMI_device_job_query_property(MAESTRO_QDMI_Device_Job job,
 	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_JOB_PROPERTY_CUSTOM1, int,
 		job->qubits_num, prop, size, value, size_ret);
 
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_JOB_PROPERTY_CUSTOM2, int,
+		job->simType, prop, size, value, size_ret);
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_JOB_PROPERTY_CUSTOM3, int,
+		job->simExecType, prop, size, value, size_ret);
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_JOB_PROPERTY_CUSTOM4, int,
+		job->maxBondDim, prop, size, value, size_ret);
+
 	return QDMI_ERROR_NOTSUPPORTED;
 } /// [DOXYGEN FUNCTION END]
 
 int MAESTRO_QDMI_device_job_submit(MAESTRO_QDMI_Device_Job job) {
-	return QDMI_ERROR_NOTSUPPORTED;
+	if (job == nullptr || job->status == QDMI_JOB_STATUS_DONE) {
+		return QDMI_ERROR_INVALIDARGUMENT;
+	}
+
+	// ensure that the device is ready
+	auto state = MAESTRO_QDMI_get_device_state();
+	state->Initialize();
+
+	state->AddJob(job);
+
+	return QDMI_SUCCESS;
 }
 
 int MAESTRO_QDMI_device_job_cancel(MAESTRO_QDMI_Device_Job job) {
@@ -506,8 +750,9 @@ int MAESTRO_QDMI_device_job_cancel(MAESTRO_QDMI_Device_Job job) {
 		return QDMI_ERROR_INVALIDARGUMENT;
 	}
 
-	job->status = QDMI_JOB_STATUS_CANCELED;
-	MAESTRO_QDMI_set_device_status(QDMI_DEVICE_STATUS_IDLE);
+	auto state = MAESTRO_QDMI_get_device_state();
+	state->CancelJob(job);
+
 	return QDMI_SUCCESS;
 } /// [DOXYGEN FUNCTION END]
 
@@ -548,8 +793,7 @@ int MAESTRO_QDMI_device_job_get_results(MAESTRO_QDMI_Device_Job job,
 	switch (result) {
 	case QDMI_JOB_RESULT_HIST_KEYS:
 	case QDMI_JOB_RESULT_HIST_VALUES:
-		//return MAESTRO_QDMI_device_job_get_results_hist(job, result, size, data,
-		//	size_ret);
+		return MAESTRO_QDMI_device_job_get_results_hist(job, result, size, data, size_ret);
 		break;
 	default:
 		break;
