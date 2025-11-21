@@ -22,6 +22,7 @@ SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 #include <gtest/gtest.h>
 #include <string>
 #include <vector>
+#include <thread>
 
 class QDMIImplementationTest : public ::testing::Test {
 protected:
@@ -213,4 +214,58 @@ TEST_F(QDMIImplementationTest, QueryDeviceQubitNum) {
                 session, QDMI_DEVICE_PROPERTY_QUBITSNUM, sizeof(size_t),
                 &num_qubits, nullptr),
             QDMI_SUCCESS);
+}
+
+TEST_F(QDMIImplementationTest, QueryDeviceQubitNumAndCheck) {
+    size_t num_qubits = 0;
+    EXPECT_EQ(MAESTRO_QDMI_device_session_query_device_property(
+        session, QDMI_DEVICE_PROPERTY_QUBITSNUM, sizeof(size_t),
+        &num_qubits, nullptr),
+        QDMI_SUCCESS);
+
+	EXPECT_EQ(num_qubits, 64);
+}
+
+TEST_F(QDMIImplementationTest, JobExecution) {
+    MAESTRO_QDMI_Device_Job job = nullptr;
+    ASSERT_EQ(MAESTRO_QDMI_device_session_create_device_job(session, &job), QDMI_SUCCESS);
+
+	size_t num_shots = 100;
+    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_SHOTSNUM, sizeof(size_t), &num_shots), QDMI_SUCCESS);
+
+    std::string program =
+        "OPENQASM 2.0;\n"
+        "include \"qelib1.inc\";\n"
+        "qreg q[2];\n"
+        "creg c[2];\n"
+        "x q[0];\n"
+        "cx q[0],q[1];\n"
+		"measure q -> c;\n";
+
+    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_PROGRAM, program.length(), program.c_str()), QDMI_SUCCESS);
+
+
+    ASSERT_EQ(MAESTRO_QDMI_device_job_submit(job), QDMI_SUCCESS);
+
+    EXPECT_EQ(MAESTRO_QDMI_device_job_wait(job, 10000), QDMI_SUCCESS);
+
+	QDMI_Job_Status status = QDMI_JOB_STATUS_RUNNING;
+	EXPECT_EQ(MAESTRO_QDMI_device_job_check(job, &status), QDMI_SUCCESS);
+
+	EXPECT_EQ(status, QDMI_JOB_STATUS_DONE);
+
+    // grab and verity results
+
+	char keys_buffer[256];
+	size_t result_size = sizeof(keys_buffer);
+    EXPECT_EQ(MAESTRO_QDMI_device_job_get_results(job, QDMI_JOB_RESULT_HIST_KEYS, result_size, keys_buffer, &result_size), QDMI_SUCCESS);
+	EXPECT_EQ(result_size, 65); // 64 bits + null terminator
+	EXPECT_STREQ(keys_buffer, "1100000000000000000000000000000000000000000000000000000000000000");
+
+    size_t counts = 0;
+    EXPECT_EQ(MAESTRO_QDMI_device_job_get_results(job, QDMI_JOB_RESULT_HIST_VALUES, sizeof(size_t), &counts, &result_size), QDMI_SUCCESS);
+    EXPECT_EQ(result_size, sizeof(size_t));
+    EXPECT_EQ(counts, 100);
+
+    MAESTRO_QDMI_device_job_free(job);
 }
