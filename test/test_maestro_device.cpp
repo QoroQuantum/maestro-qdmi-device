@@ -269,3 +269,75 @@ TEST_F(QDMIImplementationTest, JobExecution) {
 
     MAESTRO_QDMI_device_job_free(job);
 }
+
+
+TEST_F(QDMIImplementationTest, JobExecutionWithParams) {
+    MAESTRO_QDMI_Device_Job job = nullptr;
+    ASSERT_EQ(MAESTRO_QDMI_device_session_create_device_job(session, &job), QDMI_SUCCESS);
+
+	size_t num_shots = 100;
+    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_SHOTSNUM, sizeof(size_t), &num_shots), QDMI_SUCCESS);
+
+    size_t num_qubits = 2;
+    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_CUSTOM1, sizeof(size_t), &num_qubits), QDMI_SUCCESS);
+
+	size_t simType = 1; // use qcsim
+    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_CUSTOM2, sizeof(size_t), &simType), QDMI_SUCCESS);
+
+	size_t simExecType = 1; // use mps
+	EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_CUSTOM3, sizeof(size_t), &simExecType), QDMI_SUCCESS);
+
+	size_t maxBondDim = 2;
+	EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_CUSTOM4, sizeof(size_t), &maxBondDim), QDMI_SUCCESS);
+
+
+	size_t size_ret = 0;
+    EXPECT_EQ(MAESTRO_QDMI_device_job_query_property(job, QDMI_DEVICE_JOB_PROPERTY_CUSTOM1, sizeof(size_t), &num_qubits, &size_ret), QDMI_SUCCESS);
+	EXPECT_EQ(size_ret, sizeof(size_t));
+    EXPECT_EQ(MAESTRO_QDMI_device_job_query_property(job, QDMI_DEVICE_JOB_PROPERTY_CUSTOM2, sizeof(size_t), &simType, &size_ret), QDMI_SUCCESS);
+	EXPECT_EQ(size_ret, sizeof(size_t));
+    EXPECT_EQ(MAESTRO_QDMI_device_job_query_property(job, QDMI_DEVICE_JOB_PROPERTY_CUSTOM3, sizeof(size_t), &simExecType, &size_ret), QDMI_SUCCESS);
+    EXPECT_EQ(size_ret, sizeof(size_t));
+    EXPECT_EQ(MAESTRO_QDMI_device_job_query_property(job, QDMI_DEVICE_JOB_PROPERTY_CUSTOM4, sizeof(size_t), &maxBondDim, &size_ret), QDMI_SUCCESS);
+    EXPECT_EQ(size_ret, sizeof(size_t));
+
+	EXPECT_EQ(num_qubits, 2);
+	EXPECT_EQ(simType, 1);
+	EXPECT_EQ(simExecType, 1);
+	EXPECT_EQ(maxBondDim, 2);
+
+    std::string program =
+        "qreg q[2];\n"
+        "creg c[2];\n"
+        "x q[0];\n"
+        "cx q[0],q[1];\n"
+        "measure q -> c;\n";
+
+    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_PROGRAM, program.length(), program.c_str()), QDMI_SUCCESS);
+
+
+
+    ASSERT_EQ(MAESTRO_QDMI_device_job_submit(job), QDMI_SUCCESS);
+
+    EXPECT_EQ(MAESTRO_QDMI_device_job_wait(job, 5000), QDMI_SUCCESS);
+
+    QDMI_Job_Status status = QDMI_JOB_STATUS_RUNNING;
+    EXPECT_EQ(MAESTRO_QDMI_device_job_check(job, &status), QDMI_SUCCESS);
+
+    EXPECT_EQ(status, QDMI_JOB_STATUS_DONE);
+
+    // grab and verity results
+
+    char keys_buffer[3];
+    size_t result_size = sizeof(keys_buffer);
+    EXPECT_EQ(MAESTRO_QDMI_device_job_get_results(job, QDMI_JOB_RESULT_HIST_KEYS, result_size, keys_buffer, &result_size), QDMI_SUCCESS);
+    EXPECT_EQ(result_size, 3); // 2 bits + null terminator
+    EXPECT_STREQ(keys_buffer, "11");
+
+    size_t counts = 0;
+    EXPECT_EQ(MAESTRO_QDMI_device_job_get_results(job, QDMI_JOB_RESULT_HIST_VALUES, sizeof(size_t), &counts, &result_size), QDMI_SUCCESS);
+    EXPECT_EQ(result_size, sizeof(size_t));
+    EXPECT_EQ(counts, 100);
+
+    MAESTRO_QDMI_device_job_free(job);
+}

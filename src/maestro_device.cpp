@@ -74,11 +74,11 @@ enum class MAESTRO_QDMI_DEVICE_SESSION_STATUS : uint8_t { ALLOCATED, INITIALIZED
 struct MAESTRO_QDMI_Device_Session_impl_d {
 	std::string token;
 	MAESTRO_QDMI_DEVICE_SESSION_STATUS status = MAESTRO_QDMI_DEVICE_SESSION_STATUS::ALLOCATED;
-	int qubits_num = 64; // some reasonable default value
+	size_t qubits_num = 64; // some reasonable default value
 
-	int simType = 0; // 0 - aer, 1 - qcsim, 2, - composite aer, 3 - composite qcsim, 2 - gpu, any other value = whatever, auto if available
-	int simExecType = 0; // 0 - statevector, 1 - mps, 2 - stabilizer, 3 - tensor network, any other value = whatever, auto if available
-	int maxBondDim = 0; // no limit
+	size_t simType = 0; // 0 - aer, 1 - qcsim, 2, - composite aer, 3 - composite qcsim, 2 - gpu, any other value = whatever, auto if available
+	size_t simExecType = 0; // 0 - statevector, 1 - mps, 2 - stabilizer, 3 - tensor network, any other value = whatever, auto if available
+	size_t maxBondDim = 0; // no limit
 };
 
 /**
@@ -166,11 +166,11 @@ struct MAESTRO_QDMI_Device_Job_impl_d {
 
 	std::atomic<QDMI_Job_Status> status{ QDMI_JOB_STATUS_SUBMITTED };
 	size_t num_shots = 1;
-	int qubits_num = 64;
+	size_t qubits_num = 64;
 
-	int simType = 0; // 0 - aer, 1 - qcsim, 2, - composite aer, 3 - composite qcsim, 2 - gpu, any other value = whatever, auto if available
-	int simExecType = 0; // 0 - statevector, 1 - mps, 2 - stabilizer, 3 - tensor network, any other value = whatever, auto if available
-	int maxBondDim = 0; // no limit
+	size_t simType = 0; // 0 - aer, 1 - qcsim, 2, - composite aer, 3 - composite qcsim, 2 - gpu, any other value = whatever, auto if available
+	size_t simExecType = 0; // 0 - statevector, 1 - mps, 2 - stabilizer, 3 - tensor network, any other value = whatever, auto if available
+	size_t maxBondDim = 0; // no limit
 
 	std::map<std::string, size_t> results;
 };
@@ -242,15 +242,15 @@ struct MAESTRO_QDMI_Device_State {
 				const std::string config = current_job->GetConfigJson();
 				const std::string program = current_job->program;
 
-				const int qubits_num = current_job->qubits_num;
-				const int simType = current_job->simType;
-				const int simExecType = current_job->simExecType;
+				const size_t qubits_num = current_job->qubits_num;
+				const size_t simType = current_job->simType;
+				const size_t simExecType = current_job->simExecType;
 
 				lock.unlock();
 
-				simulator.CreateSimpleSimulator(qubits_num);
-				simulator.RemoveAllOptimizationSimulatorsAndAdd(simType, simExecType);
-				
+				simulator.CreateSimpleSimulator(static_cast<int>(qubits_num));
+				simulator.RemoveAllOptimizationSimulatorsAndAdd(static_cast<int>(simType), static_cast<int>(simExecType));
+
 				std::string result;
 				if (!program.empty())
 				{
@@ -308,10 +308,6 @@ struct MAESTRO_QDMI_Device_State {
 		Join();
 		status = QDMI_DEVICE_STATUS_OFFLINE;
 	}
-
-	// TODO: implement a thread that takes jobs from the queue and executes them
-	// set the status QDMI_DEVICE_STATUS_IDLE if there are no more jobs to be executed
-	// and QDMI_DEVICE_STATUS_BUSY if there are jobs being executed
 
 	void CancelJob(MAESTRO_QDMI_Device_Job job)
 	{
@@ -663,14 +659,16 @@ int MAESTRO_QDMI_device_session_set_parameter(MAESTRO_QDMI_Device_Session sessio
 	if (value != nullptr) {
 		if (param == QDMI_DEVICE_SESSION_PARAMETER_TOKEN)
 			session->token = std::string(static_cast<const char*>(value), size);
-		else if (param == QDMI_DEVICE_SESSION_PARAMETER_CUSTOM1)
-			session->qubits_num = *static_cast<const int*>(value);
-		else if (param == QDMI_DEVICE_SESSION_PARAMETER_CUSTOM2)
-			session->simType = *static_cast<const int*>(value);
-		else if (param == QDMI_DEVICE_SESSION_PARAMETER_CUSTOM3)
-			session->simExecType = *static_cast<const int*>(value);
-		else if (param == QDMI_DEVICE_SESSION_PARAMETER_CUSTOM4)
-			session->maxBondDim = *static_cast<const int*>(value);
+		else if (size == sizeof(size_t)) {
+			if (param == QDMI_DEVICE_SESSION_PARAMETER_CUSTOM1)
+				session->qubits_num = *static_cast<const size_t*>(value);
+			else if (param == QDMI_DEVICE_SESSION_PARAMETER_CUSTOM2)
+				session->simType = *static_cast<const size_t*>(value);
+			else if (param == QDMI_DEVICE_SESSION_PARAMETER_CUSTOM3)
+				session->simExecType = *static_cast<const size_t*>(value);
+			else if (param == QDMI_DEVICE_SESSION_PARAMETER_CUSTOM4)
+				session->maxBondDim = *static_cast<const size_t*>(value);
+		}
 	}
 
 	return QDMI_SUCCESS;
@@ -750,28 +748,28 @@ int MAESTRO_QDMI_device_job_set_parameter(MAESTRO_QDMI_Device_Job job,
 		}
 		return QDMI_SUCCESS;
 	case QDMI_DEVICE_JOB_PARAMETER_SHOTSNUM:
-		if (value != nullptr) {
+		if (value != nullptr && size == sizeof(size_t)) {
 			job->num_shots = *static_cast<const size_t*>(value);
 		}
 		return QDMI_SUCCESS;
 	case QDMI_DEVICE_JOB_PARAMETER_CUSTOM1:
-		if (value != nullptr) {
-			job->qubits_num = *static_cast<const int*>(value);
+		if (value != nullptr && size == sizeof(size_t)) {
+			job->qubits_num = *static_cast<const size_t*>(value);
 		}
 		return QDMI_SUCCESS;
 	case QDMI_DEVICE_JOB_PARAMETER_CUSTOM2:
-		if (value != nullptr) {
-			job->simType = *static_cast<const int*>(value);
+		if (value != nullptr && size == sizeof(size_t)) {
+			job->simType = *static_cast<const size_t*>(value);
 		}
 		return QDMI_SUCCESS;
 	case QDMI_DEVICE_JOB_PARAMETER_CUSTOM3:
-		if (value != nullptr) {
-			job->simExecType = *static_cast<const int*>(value);
+		if (value != nullptr && size == sizeof(size_t)) {
+			job->simExecType = *static_cast<const size_t*>(value);
 		}
 		return QDMI_SUCCESS;
 	case QDMI_DEVICE_JOB_PARAMETER_CUSTOM4:
-		if (value != nullptr) {
-			job->maxBondDim = *static_cast<const int*>(value);
+		if (value != nullptr && size == sizeof(size_t)) {
+			job->maxBondDim = *static_cast<const size_t*>(value);
 		}
 		return QDMI_SUCCESS;
 	default:
@@ -803,14 +801,14 @@ int MAESTRO_QDMI_device_job_query_property(MAESTRO_QDMI_Device_Job job,
 	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_JOB_PROPERTY_SHOTSNUM, size_t,
 		job->num_shots, prop, size, value, size_ret);
 
-	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_JOB_PROPERTY_CUSTOM1, int,
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_JOB_PROPERTY_CUSTOM1, size_t,
 		job->qubits_num, prop, size, value, size_ret);
 
-	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_JOB_PROPERTY_CUSTOM2, int,
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_JOB_PROPERTY_CUSTOM2, size_t,
 		job->simType, prop, size, value, size_ret);
-	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_JOB_PROPERTY_CUSTOM3, int,
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_JOB_PROPERTY_CUSTOM3, size_t,
 		job->simExecType, prop, size, value, size_ret);
-	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_JOB_PROPERTY_CUSTOM4, int,
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_JOB_PROPERTY_CUSTOM4, size_t,
 		job->maxBondDim, prop, size, value, size_ret);
 
 	return QDMI_ERROR_NOTSUPPORTED;
@@ -825,7 +823,7 @@ int MAESTRO_QDMI_device_job_submit(MAESTRO_QDMI_Device_Job job) {
 	state->AddJob(job);
 
 	return QDMI_SUCCESS;
-}
+} /// [DOXYGEN FUNCTION END]
 
 int MAESTRO_QDMI_device_job_cancel(MAESTRO_QDMI_Device_Job job) {
 	if (job == nullptr || job->status == QDMI_JOB_STATUS_DONE) {
@@ -890,7 +888,7 @@ int MAESTRO_QDMI_device_job_get_results(MAESTRO_QDMI_Device_Job job,
 	}
 
 	return QDMI_ERROR_NOTSUPPORTED;
-}
+} /// [DOXYGEN FUNCTION END]
 
 int MAESTRO_QDMI_device_session_query_device_property(
 	MAESTRO_QDMI_Device_Session session, const QDMI_Device_Property prop,
@@ -917,15 +915,14 @@ int MAESTRO_QDMI_device_session_query_device_property(
 		MAESTRO_QDMI_get_device_status(), prop, size, value,
 		size_ret);
 
-	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_PROPERTY_QUBITSNUM, int, session->qubits_num, prop,
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_PROPERTY_QUBITSNUM, size_t, session->qubits_num, prop,
 		size, value, size_ret);
 	
 	ADD_LIST_PROPERTY(QDMI_DEVICE_PROPERTY_SITES, MAESTRO_QDMI_Site, MAESTRO_DEVICE_SITES,
 	            prop, size, value, size_ret);
 	
-	//        ADD_LIST_PROPERTY(QDMI_DEVICE_PROPERTY_OPERATIONS, MAESTRO_QDMI_Operation,
-	//            MAESTRO_DEVICE_OPERATIONS, prop, size, value, size_ret);
-
+	//ADD_LIST_PROPERTY(QDMI_DEVICE_PROPERTY_OPERATIONS, MAESTRO_QDMI_Operation,
+	//	MAESTRO_DEVICE_OPERATIONS, prop, size, value, size_ret);
 
 	// The example device never requires calibration
 	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_PROPERTY_NEEDSCALIBRATION, size_t, 0,
@@ -934,6 +931,15 @@ int MAESTRO_QDMI_device_session_query_device_property(
 	ADD_SINGLE_VALUE_PROPERTY(
 		QDMI_DEVICE_PROPERTY_PULSESUPPORT, QDMI_Device_Pulse_Support_Level,
 		QDMI_DEVICE_PULSE_SUPPORT_LEVEL_NONE, prop, size, value, size_ret);
+
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_PROPERTY_CUSTOM1, size_t, 
+		session->qubits_num, prop, size, value, size_ret);
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_PROPERTY_CUSTOM2, size_t,
+		session->simType, prop, size, value, size_ret);
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_PROPERTY_CUSTOM3, size_t,
+		session->simExecType, prop, size, value, size_ret);
+	ADD_SINGLE_VALUE_PROPERTY(QDMI_DEVICE_PROPERTY_CUSTOM4, size_t,
+		session->maxBondDim, prop, size, value, size_ret);
 
 	return QDMI_ERROR_NOTSUPPORTED;
 } /// [DOXYGEN FUNCTION END]
