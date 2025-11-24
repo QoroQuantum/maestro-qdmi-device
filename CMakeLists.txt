@@ -47,6 +47,7 @@ option(BUILD_MAESTRO_DEVICE_TESTS "Build tests for MaestroDevice"
        ${MAESTRO_DEVICE_MASTER_PROJECT})
 
 include(cmake/ExternalDependencies.cmake)
+include(cmake/MaestroDependencies.cmake)
 
 # add main library code
 add_subdirectory(src)
