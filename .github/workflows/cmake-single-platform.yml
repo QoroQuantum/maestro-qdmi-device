@@ -11,6 +11,7 @@ on:
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
   BUILD_TYPE: Release
+  LD_LIBRARY_PATH: $PWD/build:$LD_LIBRARY_PATH
 
 jobs:
   build:
@@ -36,7 +37,7 @@ jobs:
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
 
     - name: Configure library path
-      run: export LD_LIBRARY_PATH=$PWD/build:$LD_LIBRARY_PATH
+      run: echo "LD_LIBRARY_PATH=$PWD/build:$LD_LIBRARY_PATH" >> $GITHUB_ENV
 
     - name: Ensure library can be loaded
       run: sudo ldconfig
