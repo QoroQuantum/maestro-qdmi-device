@@ -247,7 +247,7 @@ TEST_F(QDMIImplementationTest, JobExecution) {
 
     ASSERT_EQ(MAESTRO_QDMI_device_job_submit(job), QDMI_SUCCESS);
 
-    EXPECT_EQ(MAESTRO_QDMI_device_job_wait(job, 10000), QDMI_SUCCESS);
+    EXPECT_EQ(MAESTRO_QDMI_device_job_wait(job, 5000), QDMI_SUCCESS);
 
 	QDMI_Job_Status status = QDMI_JOB_STATUS_RUNNING;
 	EXPECT_EQ(MAESTRO_QDMI_device_job_check(job, &status), QDMI_SUCCESS);
@@ -314,8 +314,6 @@ TEST_F(QDMIImplementationTest, JobExecutionWithParams) {
         "measure q -> c;\n";
 
     EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_PROGRAM, program.length(), program.c_str()), QDMI_SUCCESS);
-
-
 
     ASSERT_EQ(MAESTRO_QDMI_device_job_submit(job), QDMI_SUCCESS);
 

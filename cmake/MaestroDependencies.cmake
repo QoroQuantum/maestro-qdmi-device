@@ -12,3 +12,4 @@ ExternalProject_Add(
 	INSTALL_COMMAND cp "${CMAKE_BINARY_DIR}/maestro-prefix/src/maestro/build/libmaestro.so" "${CMAKE_BINARY_DIR}/maestro.so"
 	INSTALL_DIR ${CMAKE_BINARY_DIR}
 	)
+

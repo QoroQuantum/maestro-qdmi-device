@@ -168,7 +168,7 @@ struct MAESTRO_QDMI_Device_Job_impl_d {
 	size_t num_shots = 1;
 	size_t qubits_num = 64;
 
-	size_t simType = 0; // 0 - aer, 1 - qcsim, 2, - composite aer, 3 - composite qcsim, 2 - gpu, any other value = whatever, auto if available
+	size_t simType = 0; // 0 - aer, 1 - qcsim, 2 - composite aer, 3 - composite qcsim, 4 - gpu, any other value = whatever, auto if available
 	size_t simExecType = 0; // 0 - statevector, 1 - mps, 2 - stabilizer, 3 - tensor network, any other value = whatever, auto if available
 	size_t maxBondDim = 0; // no limit
 
@@ -249,7 +249,29 @@ struct MAESTRO_QDMI_Device_State {
 				lock.unlock();
 
 				simulator.CreateSimpleSimulator(static_cast<int>(qubits_num));
-				simulator.RemoveAllOptimizationSimulatorsAndAdd(static_cast<int>(simType), static_cast<int>(simExecType));
+
+				if (simType < 2) // qcsim or aer 
+				{
+					if (simExecType < 4)
+						simulator.RemoveAllOptimizationSimulatorsAndAdd(static_cast<int>(simType), static_cast<int>(simExecType));
+					else
+					{
+						simulator.RemoveAllOptimizationSimulatorsAndAdd(static_cast<int>(simType), 0);
+						simulator.AddOptimizationSimulator(static_cast<int>(simType), 1);
+						simulator.AddOptimizationSimulator(static_cast<int>(simType), 2);
+					}
+				}
+				else if (simType < 4) // composite, ignore exec type and set statevector
+				{
+					simulator.RemoveAllOptimizationSimulatorsAndAdd(static_cast<int>(simType), 0);
+				}
+				else if (simType == 4) // gpu
+				{
+					if (simExecType < 2) // statevector or mps
+						simulator.RemoveAllOptimizationSimulatorsAndAdd(static_cast<int>(simType), static_cast<int>(simExecType));
+					else // other types are not supported yet on gpu, set statevector
+						simulator.RemoveAllOptimizationSimulatorsAndAdd(static_cast<int>(simType), 0);
+				}
 
 				std::string result;
 				if (!program.empty())
