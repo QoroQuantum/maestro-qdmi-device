@@ -39,7 +39,7 @@ jobs:
       run: export LD_LIBRARY_PATH=$PWD/build:$LD_LIBRARY_PATH
 
     - name: Ensure library can be loaded
-      run: ldconfig
+      run: sudo ldconfig
 
     - name: Test
       working-directory: ${{github.workspace}}/build
