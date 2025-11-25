@@ -36,7 +36,7 @@ jobs:
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
 
     - name: Configure library path
-      run: export LD_LIBRARY_PATH=${{github.workspace}}/build:$LD_LIBRARY_PATH
+      run: export LD_LIBRARY_PATH=$PWD/build:$LD_LIBRARY_PATH
 
     - name: Ensure library can be loaded
       run: sudo ldconfig
