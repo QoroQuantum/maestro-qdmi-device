@@ -1,3 +1,5 @@
+venv/
+
 # Prerequisites
 *.d
 
@@ -39,3 +41,22 @@
 
 # debug information files
 *.dwo
+
+# CMake build artifacts
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+_deps/
+Testing/
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store

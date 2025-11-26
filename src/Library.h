@@ -1,3 +1,19 @@
+/*------------------------------------------------------------------------------
+Copyright 2025 Qoro Quantum Ltd.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+------------------------------------------------------------------------------*/
+
 /**
  * @file Library.h
  * @version 1.0
@@ -24,80 +40,73 @@
 
 #include <windows.h>
 
-#endif 
+#endif
 
 namespace Utils {
 
-	class Library
-	{
-	public:
-		Library(const Library&) = delete;
-		Library& operator=(const Library&) = delete;
-		Library(Library&&) = default;
-		Library& operator=(Library&&) = default;
+class Library
+{
+public:
+    Library(const Library&) = delete;
+    Library& operator=(const Library&) = delete;
+    Library(Library&&) = default;
+    Library& operator=(Library&&) = default;
 
-		Library() noexcept
-		{
-		}
+    Library() noexcept {}
 
-		virtual ~Library()
-		{
-			if (handle)
+    virtual ~Library()
+    {
+        if (handle)
 #ifdef __linux__
-				dlclose(handle);
+            dlclose(handle);
 #elif defined(_WIN32)
-				FreeLibrary(handle);
+            FreeLibrary(handle);
 #endif
-		}
+    }
 
-		virtual bool Init(const char* libName) noexcept
-		{
+    virtual bool Init(const char* libName) noexcept
+    {
 #ifdef __linux__
-			handle = dlopen(libName, RTLD_NOW);
+        handle = dlopen(libName, RTLD_NOW);
 
-			if (handle == nullptr)
-			{
-				const char* dlsym_error = dlerror();
-				if (dlsym_error)
-					std::cout << "Library: Unable to load library, error: " << dlsym_error << std::endl;
+        if (handle == nullptr) {
+            const char* dlsym_error = dlerror();
+            if (dlsym_error)
+                std::cout << "Library: Unable to load library, error: " << dlsym_error << std::endl;
 
-				return false;
-			}
+            return false;
+        }
 #elif defined(_WIN32)
-			handle = LoadLibraryA(libName);
-			if (handle == nullptr)
-			{
-				const DWORD error = GetLastError();
-				std::cout << "Library: Unable to load library, error code: " << error << std::endl;
-				return false;
-			}
+        handle = LoadLibraryA(libName);
+        if (handle == nullptr) {
+            const DWORD error = GetLastError();
+            std::cout << "Library: Unable to load library, error code: " << error << std::endl;
+            return false;
+        }
 #endif
 
-			return true;
-		}
+        return true;
+    }
 
-		void* GetFunction(const char* funcName) noexcept
-		{
+    void* GetFunction(const char* funcName) noexcept
+    {
 #ifdef __linux__
-			return dlsym(handle, funcName);
+        return dlsym(handle, funcName);
 #elif defined(_WIN32)
-			return GetProcAddress(handle, funcName);
+        return GetProcAddress(handle, funcName);
 #endif
-		}
+    }
 
-		const void* GetHandle() const noexcept
-		{
-			return handle;
-		}
+    const void* GetHandle() const noexcept { return handle; }
 
-	private:
+private:
 #ifdef __linux__
-		void* handle = nullptr;
+    void* handle = nullptr;
 #elif defined(_WIN32)
-		HINSTANCE handle = nullptr;
+    HINSTANCE handle = nullptr;
 #endif
-	};
+};
 
-}
+} // namespace Utils
 
 #endif

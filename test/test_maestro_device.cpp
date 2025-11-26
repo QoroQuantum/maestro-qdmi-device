@@ -16,304 +16,334 @@ the License.
 SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 ------------------------------------------------------------------------------*/
 
-#include "maestro_qdmi/device.h"
+#include <gtest/gtest.h>
 
 #include <cstddef>
-#include <gtest/gtest.h>
 #include <string>
-#include <vector>
 #include <thread>
+#include <vector>
 
-class QDMIImplementationTest : public ::testing::Test {
+#include "maestro_qdmi/device.h"
+
+class QDMIImplementationTest : public ::testing::Test
+{
 protected:
-  MAESTRO_QDMI_Device_Session session = nullptr;
+    MAESTRO_QDMI_Device_Session session = nullptr;
 
-  void SetUp() override {
-    ASSERT_EQ(MAESTRO_QDMI_device_initialize(), QDMI_SUCCESS)
-        << "Failed to initialize the device";
+    void SetUp() override
+    {
+        ASSERT_EQ(MAESTRO_QDMI_device_initialize(), QDMI_SUCCESS)
+            << "Failed to initialize the device";
 
-    ASSERT_EQ(MAESTRO_QDMI_device_session_alloc(&session), QDMI_SUCCESS)
-        << "Failed to allocate a session";
+        ASSERT_EQ(MAESTRO_QDMI_device_session_alloc(&session), QDMI_SUCCESS)
+            << "Failed to allocate a session";
 
-    ASSERT_EQ(MAESTRO_QDMI_device_session_init(session), QDMI_SUCCESS)
-        << "Failed to initialize a session. Potential errors: Wrong or missing "
-           "authentication information, device status is offline, or in "
-           "maintenance. To provide credentials, take a look in " __FILE__
-        << (__LINE__ - 4);
-  }
+        ASSERT_EQ(MAESTRO_QDMI_device_session_init(session), QDMI_SUCCESS)
+            << "Failed to initialize a session. Potential errors: Wrong or missing "
+               "authentication information, device status is offline, or in "
+               "maintenance. To provide credentials, take a look in " __FILE__
+            << (__LINE__ - 4);
+    }
 
-  void TearDown() override { MAESTRO_QDMI_device_finalize(); }
+    void TearDown() override { MAESTRO_QDMI_device_finalize(); }
 };
 
-TEST_F(QDMIImplementationTest, SessionSetParameterImplemented) {
-  ASSERT_EQ(MAESTRO_QDMI_device_session_set_parameter(
-                session, QDMI_DEVICE_SESSION_PARAMETER_MAX, 0, nullptr),
-            QDMI_ERROR_INVALIDARGUMENT);
+TEST_F(QDMIImplementationTest, SessionSetParameterImplemented)
+{
+    ASSERT_EQ(MAESTRO_QDMI_device_session_set_parameter(session, QDMI_DEVICE_SESSION_PARAMETER_MAX,
+                                                        0, nullptr),
+              QDMI_ERROR_INVALIDARGUMENT);
 }
 
-TEST_F(QDMIImplementationTest, JobCreateImplemented) {
-  MAESTRO_QDMI_Device_Job job = nullptr;
-  ASSERT_NE(MAESTRO_QDMI_device_session_create_device_job(session, &job),
-            QDMI_ERROR_NOTIMPLEMENTED);
-  MAESTRO_QDMI_device_job_free(job);
+TEST_F(QDMIImplementationTest, JobCreateImplemented)
+{
+    MAESTRO_QDMI_Device_Job job = nullptr;
+    ASSERT_NE(MAESTRO_QDMI_device_session_create_device_job(session, &job),
+              QDMI_ERROR_NOTIMPLEMENTED);
+    MAESTRO_QDMI_device_job_free(job);
 }
 
-TEST_F(QDMIImplementationTest, JobSetParameterImplemented) {
-  MAESTRO_QDMI_Device_Job job = nullptr;
-  ASSERT_EQ(MAESTRO_QDMI_device_session_create_device_job(session, &job),
-            QDMI_SUCCESS);
-  ASSERT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_MAX,
-                                             0, nullptr),
-            QDMI_ERROR_INVALIDARGUMENT);
-  MAESTRO_QDMI_device_job_free(job);
+TEST_F(QDMIImplementationTest, JobSetParameterImplemented)
+{
+    MAESTRO_QDMI_Device_Job job = nullptr;
+    ASSERT_EQ(MAESTRO_QDMI_device_session_create_device_job(session, &job), QDMI_SUCCESS);
+    ASSERT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_MAX, 0, nullptr),
+              QDMI_ERROR_INVALIDARGUMENT);
+    MAESTRO_QDMI_device_job_free(job);
 }
 
-TEST_F(QDMIImplementationTest, JobQueryPropertyImplemented) {
-  MAESTRO_QDMI_Device_Job job = nullptr;
-  ASSERT_EQ(MAESTRO_QDMI_device_session_create_device_job(session, &job),
-            QDMI_SUCCESS);
-  ASSERT_EQ(MAESTRO_QDMI_device_job_query_property(job, QDMI_DEVICE_JOB_PROPERTY_MAX,
-                                              0, nullptr, nullptr),
-            QDMI_ERROR_INVALIDARGUMENT);
-  MAESTRO_QDMI_device_job_free(job);
+TEST_F(QDMIImplementationTest, JobQueryPropertyImplemented)
+{
+    MAESTRO_QDMI_Device_Job job = nullptr;
+    ASSERT_EQ(MAESTRO_QDMI_device_session_create_device_job(session, &job), QDMI_SUCCESS);
+    ASSERT_EQ(MAESTRO_QDMI_device_job_query_property(job, QDMI_DEVICE_JOB_PROPERTY_MAX, 0, nullptr,
+                                                     nullptr),
+              QDMI_ERROR_INVALIDARGUMENT);
+    MAESTRO_QDMI_device_job_free(job);
 }
 
-TEST_F(QDMIImplementationTest, JobSubmitImplemented) {
-  MAESTRO_QDMI_Device_Job job = nullptr;
-  ASSERT_EQ(MAESTRO_QDMI_device_session_create_device_job(session, &job),
-            QDMI_SUCCESS);
-  ASSERT_NE(MAESTRO_QDMI_device_job_submit(job), QDMI_ERROR_NOTIMPLEMENTED);
-  MAESTRO_QDMI_device_job_free(job);
+TEST_F(QDMIImplementationTest, JobSubmitImplemented)
+{
+    MAESTRO_QDMI_Device_Job job = nullptr;
+    ASSERT_EQ(MAESTRO_QDMI_device_session_create_device_job(session, &job), QDMI_SUCCESS);
+    ASSERT_NE(MAESTRO_QDMI_device_job_submit(job), QDMI_ERROR_NOTIMPLEMENTED);
+    MAESTRO_QDMI_device_job_free(job);
 }
 
-TEST_F(QDMIImplementationTest, JobCancelImplemented) {
-  MAESTRO_QDMI_Device_Job job = nullptr;
-  ASSERT_EQ(MAESTRO_QDMI_device_session_create_device_job(session, &job),
-            QDMI_SUCCESS);
-  ASSERT_NE(MAESTRO_QDMI_device_job_cancel(job), QDMI_ERROR_NOTIMPLEMENTED);
-  MAESTRO_QDMI_device_job_free(job);
+TEST_F(QDMIImplementationTest, JobCancelImplemented)
+{
+    MAESTRO_QDMI_Device_Job job = nullptr;
+    ASSERT_EQ(MAESTRO_QDMI_device_session_create_device_job(session, &job), QDMI_SUCCESS);
+    ASSERT_NE(MAESTRO_QDMI_device_job_cancel(job), QDMI_ERROR_NOTIMPLEMENTED);
+    MAESTRO_QDMI_device_job_free(job);
 }
 
-TEST_F(QDMIImplementationTest, JobCheckImplemented) {
-  MAESTRO_QDMI_Device_Job job = nullptr;
-  QDMI_Job_Status status = QDMI_JOB_STATUS_RUNNING;
-  ASSERT_EQ(MAESTRO_QDMI_device_session_create_device_job(session, &job),
-            QDMI_SUCCESS);
-  ASSERT_NE(MAESTRO_QDMI_device_job_check(job, &status), QDMI_ERROR_NOTIMPLEMENTED);
-  MAESTRO_QDMI_device_job_free(job);
+TEST_F(QDMIImplementationTest, JobCheckImplemented)
+{
+    MAESTRO_QDMI_Device_Job job = nullptr;
+    QDMI_Job_Status status = QDMI_JOB_STATUS_RUNNING;
+    ASSERT_EQ(MAESTRO_QDMI_device_session_create_device_job(session, &job), QDMI_SUCCESS);
+    ASSERT_NE(MAESTRO_QDMI_device_job_check(job, &status), QDMI_ERROR_NOTIMPLEMENTED);
+    MAESTRO_QDMI_device_job_free(job);
 }
 
-TEST_F(QDMIImplementationTest, JobWaitImplemented) {
-  MAESTRO_QDMI_Device_Job job = nullptr;
-  ASSERT_EQ(MAESTRO_QDMI_device_session_create_device_job(session, &job),
-            QDMI_SUCCESS);
-  ASSERT_NE(MAESTRO_QDMI_device_job_wait(job, 0), QDMI_ERROR_NOTIMPLEMENTED);
-  MAESTRO_QDMI_device_job_free(job);
+TEST_F(QDMIImplementationTest, JobWaitImplemented)
+{
+    MAESTRO_QDMI_Device_Job job = nullptr;
+    ASSERT_EQ(MAESTRO_QDMI_device_session_create_device_job(session, &job), QDMI_SUCCESS);
+    ASSERT_NE(MAESTRO_QDMI_device_job_wait(job, 0), QDMI_ERROR_NOTIMPLEMENTED);
+    MAESTRO_QDMI_device_job_free(job);
 }
 
-TEST_F(QDMIImplementationTest, JobGetResultsImplemented) {
-  MAESTRO_QDMI_Device_Job job = nullptr;
-  ASSERT_EQ(MAESTRO_QDMI_device_session_create_device_job(session, &job),
-            QDMI_SUCCESS);
-  ASSERT_EQ(MAESTRO_QDMI_device_job_get_results(job, QDMI_JOB_RESULT_MAX, 0, nullptr,
-                                           nullptr),
-            QDMI_ERROR_INVALIDARGUMENT);
-  MAESTRO_QDMI_device_job_free(job);
+TEST_F(QDMIImplementationTest, JobGetResultsImplemented)
+{
+    MAESTRO_QDMI_Device_Job job = nullptr;
+    ASSERT_EQ(MAESTRO_QDMI_device_session_create_device_job(session, &job), QDMI_SUCCESS);
+    ASSERT_EQ(MAESTRO_QDMI_device_job_get_results(job, QDMI_JOB_RESULT_MAX, 0, nullptr, nullptr),
+              QDMI_ERROR_INVALIDARGUMENT);
+    MAESTRO_QDMI_device_job_free(job);
 }
 
-TEST_F(QDMIImplementationTest, QueryDevicePropertyImplemented) {
-  ASSERT_EQ(MAESTRO_QDMI_device_session_query_device_property(
-                nullptr, QDMI_DEVICE_PROPERTY_NAME, 0, nullptr, nullptr),
-            QDMI_ERROR_INVALIDARGUMENT);
+TEST_F(QDMIImplementationTest, QueryDevicePropertyImplemented)
+{
+    ASSERT_EQ(MAESTRO_QDMI_device_session_query_device_property(nullptr, QDMI_DEVICE_PROPERTY_NAME,
+                                                                0, nullptr, nullptr),
+              QDMI_ERROR_INVALIDARGUMENT);
 }
 
-TEST_F(QDMIImplementationTest, QuerySitePropertyImplemented) {
-  ASSERT_EQ(MAESTRO_QDMI_device_session_query_site_property(
-                nullptr, nullptr, QDMI_SITE_PROPERTY_MAX, 0, nullptr, nullptr),
-            QDMI_ERROR_INVALIDARGUMENT);
-}
-
-TEST_F(QDMIImplementationTest, QueryOperationPropertyImplemented) {
-  ASSERT_EQ(MAESTRO_QDMI_device_session_query_operation_property(
-                nullptr, nullptr, 0, nullptr, 0, nullptr,
-                QDMI_OPERATION_PROPERTY_MAX, 0, nullptr, nullptr),
-            QDMI_ERROR_INVALIDARGUMENT);
-}
-
-TEST_F(QDMIImplementationTest, QueryDeviceNameImplemented) {
-  size_t size = 0;
-  ASSERT_EQ(MAESTRO_QDMI_device_session_query_device_property(
-                session, QDMI_DEVICE_PROPERTY_NAME, 0, nullptr, &size),
-            QDMI_SUCCESS)
-      << "Devices must provide a name";
-  std::string value(size - 1, '\0');
-  ASSERT_EQ(
-      MAESTRO_QDMI_device_session_query_device_property(
-          session, QDMI_DEVICE_PROPERTY_NAME, size, value.data(), nullptr),
-      QDMI_SUCCESS)
-      << "Devices must provide a name";
-  ASSERT_FALSE(value.empty()) << "Devices must provide a name";
-}
-
-TEST_F(QDMIImplementationTest, QueryDeviceVersionImplemented) {
-  size_t size = 0;
-  ASSERT_EQ(MAESTRO_QDMI_device_session_query_device_property(
-                session, QDMI_DEVICE_PROPERTY_VERSION, 0, nullptr, &size),
-            QDMI_SUCCESS)
-      << "Devices must provide a version";
-  std::string value(size - 1, '\0');
-  ASSERT_EQ(
-      MAESTRO_QDMI_device_session_query_device_property(
-          session, QDMI_DEVICE_PROPERTY_VERSION, size, value.data(), nullptr),
-      QDMI_SUCCESS)
-      << "Devices must provide a version";
-  ASSERT_FALSE(value.empty()) << "Devices must provide a version";
-}
-
-TEST_F(QDMIImplementationTest, QueryDeviceLibraryVersionImplemented) {
-  size_t size = 0;
-  ASSERT_EQ(
-      MAESTRO_QDMI_device_session_query_device_property(
-          session, QDMI_DEVICE_PROPERTY_LIBRARYVERSION, 0, nullptr, &size),
-      QDMI_SUCCESS)
-      << "Devices must provide a library version";
-  std::string value(size - 1, '\0');
-  ASSERT_EQ(MAESTRO_QDMI_device_session_query_device_property(
-                session, QDMI_DEVICE_PROPERTY_LIBRARYVERSION, size,
-                value.data(), nullptr),
-            QDMI_SUCCESS)
-      << "Devices must provide a library version";
-  ASSERT_FALSE(value.empty()) << "Devices must provide a library version";
-}
-
-TEST_F(QDMIImplementationTest, QuerySiteIndexImplemented) {
-  size_t size = 0;
-  ASSERT_EQ(MAESTRO_QDMI_device_session_query_device_property(
-                session, QDMI_DEVICE_PROPERTY_SITES, 0, nullptr, &size),
-            QDMI_SUCCESS)
-      << "Devices must provide a list of sites";
-  std::vector<MAESTRO_QDMI_Site> sites(size / sizeof(MAESTRO_QDMI_Site));
-  ASSERT_EQ(MAESTRO_QDMI_device_session_query_device_property(
-                session, QDMI_DEVICE_PROPERTY_SITES, size,
-                static_cast<void *>(sites.data()), nullptr),
-            QDMI_SUCCESS)
-      << "Devices must provide a list of sites";
-  size_t id = 0;
-  for (auto *site : sites) {
+TEST_F(QDMIImplementationTest, QuerySitePropertyImplemented)
+{
     ASSERT_EQ(MAESTRO_QDMI_device_session_query_site_property(
-                  session, site, QDMI_SITE_PROPERTY_INDEX, sizeof(size_t), &id,
+                  nullptr, nullptr, QDMI_SITE_PROPERTY_MAX, 0, nullptr, nullptr),
+              QDMI_ERROR_INVALIDARGUMENT);
+}
+
+TEST_F(QDMIImplementationTest, QueryOperationPropertyImplemented)
+{
+    ASSERT_EQ(MAESTRO_QDMI_device_session_query_operation_property(
+                  nullptr, nullptr, 0, nullptr, 0, nullptr, QDMI_OPERATION_PROPERTY_MAX, 0, nullptr,
                   nullptr),
+              QDMI_ERROR_INVALIDARGUMENT);
+}
+
+TEST_F(QDMIImplementationTest, QueryDeviceNameImplemented)
+{
+    size_t size = 0;
+    ASSERT_EQ(MAESTRO_QDMI_device_session_query_device_property(session, QDMI_DEVICE_PROPERTY_NAME,
+                                                                0, nullptr, &size),
               QDMI_SUCCESS)
-        << "Devices must provide a site id";
-  }
+        << "Devices must provide a name";
+    std::string value(size - 1, '\0');
+    ASSERT_EQ(MAESTRO_QDMI_device_session_query_device_property(session, QDMI_DEVICE_PROPERTY_NAME,
+                                                                size, value.data(), nullptr),
+              QDMI_SUCCESS)
+        << "Devices must provide a name";
+    ASSERT_FALSE(value.empty()) << "Devices must provide a name";
 }
 
-TEST_F(QDMIImplementationTest, QueryDeviceQubitNum) {
-  size_t num_qubits = 0;
-  EXPECT_EQ(MAESTRO_QDMI_device_session_query_device_property(
-                session, QDMI_DEVICE_PROPERTY_QUBITSNUM, sizeof(size_t),
-                &num_qubits, nullptr),
-            QDMI_SUCCESS);
+TEST_F(QDMIImplementationTest, QueryDeviceVersionImplemented)
+{
+    size_t size = 0;
+    ASSERT_EQ(MAESTRO_QDMI_device_session_query_device_property(
+                  session, QDMI_DEVICE_PROPERTY_VERSION, 0, nullptr, &size),
+              QDMI_SUCCESS)
+        << "Devices must provide a version";
+    std::string value(size - 1, '\0');
+    ASSERT_EQ(MAESTRO_QDMI_device_session_query_device_property(
+                  session, QDMI_DEVICE_PROPERTY_VERSION, size, value.data(), nullptr),
+              QDMI_SUCCESS)
+        << "Devices must provide a version";
+    ASSERT_FALSE(value.empty()) << "Devices must provide a version";
 }
 
-TEST_F(QDMIImplementationTest, QueryDeviceQubitNumAndCheck) {
+TEST_F(QDMIImplementationTest, QueryDeviceLibraryVersionImplemented)
+{
+    size_t size = 0;
+    ASSERT_EQ(MAESTRO_QDMI_device_session_query_device_property(
+                  session, QDMI_DEVICE_PROPERTY_LIBRARYVERSION, 0, nullptr, &size),
+              QDMI_SUCCESS)
+        << "Devices must provide a library version";
+    std::string value(size - 1, '\0');
+    ASSERT_EQ(MAESTRO_QDMI_device_session_query_device_property(
+                  session, QDMI_DEVICE_PROPERTY_LIBRARYVERSION, size, value.data(), nullptr),
+              QDMI_SUCCESS)
+        << "Devices must provide a library version";
+    ASSERT_FALSE(value.empty()) << "Devices must provide a library version";
+}
+
+TEST_F(QDMIImplementationTest, QuerySiteIndexImplemented)
+{
+    size_t size = 0;
+    ASSERT_EQ(MAESTRO_QDMI_device_session_query_device_property(session, QDMI_DEVICE_PROPERTY_SITES,
+                                                                0, nullptr, &size),
+              QDMI_SUCCESS)
+        << "Devices must provide a list of sites";
+    std::vector<MAESTRO_QDMI_Site> sites(size / sizeof(MAESTRO_QDMI_Site));
+    ASSERT_EQ(
+        MAESTRO_QDMI_device_session_query_device_property(
+            session, QDMI_DEVICE_PROPERTY_SITES, size, static_cast<void*>(sites.data()), nullptr),
+        QDMI_SUCCESS)
+        << "Devices must provide a list of sites";
+    size_t id = 0;
+    for (auto* site : sites) {
+        ASSERT_EQ(MAESTRO_QDMI_device_session_query_site_property(
+                      session, site, QDMI_SITE_PROPERTY_INDEX, sizeof(size_t), &id, nullptr),
+                  QDMI_SUCCESS)
+            << "Devices must provide a site id";
+    }
+}
+
+TEST_F(QDMIImplementationTest, QueryDeviceQubitNum)
+{
     size_t num_qubits = 0;
     EXPECT_EQ(MAESTRO_QDMI_device_session_query_device_property(
-        session, QDMI_DEVICE_PROPERTY_QUBITSNUM, sizeof(size_t),
-        &num_qubits, nullptr),
-        QDMI_SUCCESS);
-
-	EXPECT_EQ(num_qubits, 64);
+                  session, QDMI_DEVICE_PROPERTY_QUBITSNUM, sizeof(size_t), &num_qubits, nullptr),
+              QDMI_SUCCESS);
 }
 
-TEST_F(QDMIImplementationTest, JobExecution) {
+TEST_F(QDMIImplementationTest, QueryDeviceQubitNumAndCheck)
+{
+    size_t num_qubits = 0;
+    EXPECT_EQ(MAESTRO_QDMI_device_session_query_device_property(
+                  session, QDMI_DEVICE_PROPERTY_QUBITSNUM, sizeof(size_t), &num_qubits, nullptr),
+              QDMI_SUCCESS);
+
+    EXPECT_EQ(num_qubits, 64);
+}
+
+TEST_F(QDMIImplementationTest, JobExecution)
+{
     MAESTRO_QDMI_Device_Job job = nullptr;
     ASSERT_EQ(MAESTRO_QDMI_device_session_create_device_job(session, &job), QDMI_SUCCESS);
 
-	size_t num_shots = 100;
-    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_SHOTSNUM, sizeof(size_t), &num_shots), QDMI_SUCCESS);
+    size_t num_shots = 100;
+    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_SHOTSNUM,
+                                                    sizeof(size_t), &num_shots),
+              QDMI_SUCCESS);
 
-    std::string program =
-        "OPENQASM 2.0;\n"
-        "include \"qelib1.inc\";\n"
-        "qreg q[2];\n"
-        "creg c[2];\n"
-        "x q[0];\n"
-        "cx q[0],q[1];\n"
-		"measure q -> c;\n";
+    std::string program = "OPENQASM 2.0;\n"
+                          "include \"qelib1.inc\";\n"
+                          "qreg q[2];\n"
+                          "creg c[2];\n"
+                          "x q[0];\n"
+                          "cx q[0],q[1];\n"
+                          "measure q -> c;\n";
 
-    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_PROGRAM, program.length(), program.c_str()), QDMI_SUCCESS);
-
+    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_PROGRAM,
+                                                    program.length(), program.c_str()),
+              QDMI_SUCCESS);
 
     ASSERT_EQ(MAESTRO_QDMI_device_job_submit(job), QDMI_SUCCESS);
 
     EXPECT_EQ(MAESTRO_QDMI_device_job_wait(job, 5000), QDMI_SUCCESS);
 
-	QDMI_Job_Status status = QDMI_JOB_STATUS_RUNNING;
-	EXPECT_EQ(MAESTRO_QDMI_device_job_check(job, &status), QDMI_SUCCESS);
+    QDMI_Job_Status status = QDMI_JOB_STATUS_RUNNING;
+    EXPECT_EQ(MAESTRO_QDMI_device_job_check(job, &status), QDMI_SUCCESS);
 
-	EXPECT_EQ(status, QDMI_JOB_STATUS_DONE);
+    EXPECT_EQ(status, QDMI_JOB_STATUS_DONE);
 
     // grab and verity results
 
-	char keys_buffer[256];
-	size_t result_size = sizeof(keys_buffer);
-    EXPECT_EQ(MAESTRO_QDMI_device_job_get_results(job, QDMI_JOB_RESULT_HIST_KEYS, result_size, keys_buffer, &result_size), QDMI_SUCCESS);
-	EXPECT_EQ(result_size, 65); // 64 bits + null terminator
-	EXPECT_STREQ(keys_buffer, "1100000000000000000000000000000000000000000000000000000000000000");
+    char keys_buffer[256];
+    size_t result_size = sizeof(keys_buffer);
+    EXPECT_EQ(MAESTRO_QDMI_device_job_get_results(job, QDMI_JOB_RESULT_HIST_KEYS, result_size,
+                                                  keys_buffer, &result_size),
+              QDMI_SUCCESS);
+    EXPECT_EQ(result_size, 65); // 64 bits + null terminator
+    EXPECT_STREQ(keys_buffer, "1100000000000000000000000000000000000000000000000000000000000000");
 
     size_t counts = 0;
-    EXPECT_EQ(MAESTRO_QDMI_device_job_get_results(job, QDMI_JOB_RESULT_HIST_VALUES, sizeof(size_t), &counts, &result_size), QDMI_SUCCESS);
+    EXPECT_EQ(MAESTRO_QDMI_device_job_get_results(job, QDMI_JOB_RESULT_HIST_VALUES, sizeof(size_t),
+                                                  &counts, &result_size),
+              QDMI_SUCCESS);
     EXPECT_EQ(result_size, sizeof(size_t));
     EXPECT_EQ(counts, 100);
 
     MAESTRO_QDMI_device_job_free(job);
 }
 
-
-TEST_F(QDMIImplementationTest, JobExecutionWithParams) {
+TEST_F(QDMIImplementationTest, JobExecutionWithParams)
+{
     MAESTRO_QDMI_Device_Job job = nullptr;
     ASSERT_EQ(MAESTRO_QDMI_device_session_create_device_job(session, &job), QDMI_SUCCESS);
 
-	size_t num_shots = 100;
-    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_SHOTSNUM, sizeof(size_t), &num_shots), QDMI_SUCCESS);
+    size_t num_shots = 100;
+    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_SHOTSNUM,
+                                                    sizeof(size_t), &num_shots),
+              QDMI_SUCCESS);
 
     size_t num_qubits = 2;
-    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_CUSTOM1, sizeof(size_t), &num_qubits), QDMI_SUCCESS);
+    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_CUSTOM1,
+                                                    sizeof(size_t), &num_qubits),
+              QDMI_SUCCESS);
 
-	size_t simType = 1; // use qcsim
-    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_CUSTOM2, sizeof(size_t), &simType), QDMI_SUCCESS);
+    size_t simType = 1; // use qcsim
+    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_CUSTOM2,
+                                                    sizeof(size_t), &simType),
+              QDMI_SUCCESS);
 
-	size_t simExecType = 1; // use mps
-	EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_CUSTOM3, sizeof(size_t), &simExecType), QDMI_SUCCESS);
+    size_t simExecType = 1; // use mps
+    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_CUSTOM3,
+                                                    sizeof(size_t), &simExecType),
+              QDMI_SUCCESS);
 
-	size_t maxBondDim = 2;
-	EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_CUSTOM4, sizeof(size_t), &maxBondDim), QDMI_SUCCESS);
+    size_t maxBondDim = 2;
+    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_CUSTOM4,
+                                                    sizeof(size_t), &maxBondDim),
+              QDMI_SUCCESS);
 
-
-	size_t size_ret = 0;
-    EXPECT_EQ(MAESTRO_QDMI_device_job_query_property(job, QDMI_DEVICE_JOB_PROPERTY_CUSTOM1, sizeof(size_t), &num_qubits, &size_ret), QDMI_SUCCESS);
-	EXPECT_EQ(size_ret, sizeof(size_t));
-    EXPECT_EQ(MAESTRO_QDMI_device_job_query_property(job, QDMI_DEVICE_JOB_PROPERTY_CUSTOM2, sizeof(size_t), &simType, &size_ret), QDMI_SUCCESS);
-	EXPECT_EQ(size_ret, sizeof(size_t));
-    EXPECT_EQ(MAESTRO_QDMI_device_job_query_property(job, QDMI_DEVICE_JOB_PROPERTY_CUSTOM3, sizeof(size_t), &simExecType, &size_ret), QDMI_SUCCESS);
+    size_t size_ret = 0;
+    EXPECT_EQ(MAESTRO_QDMI_device_job_query_property(job, QDMI_DEVICE_JOB_PROPERTY_CUSTOM1,
+                                                     sizeof(size_t), &num_qubits, &size_ret),
+              QDMI_SUCCESS);
     EXPECT_EQ(size_ret, sizeof(size_t));
-    EXPECT_EQ(MAESTRO_QDMI_device_job_query_property(job, QDMI_DEVICE_JOB_PROPERTY_CUSTOM4, sizeof(size_t), &maxBondDim, &size_ret), QDMI_SUCCESS);
+    EXPECT_EQ(MAESTRO_QDMI_device_job_query_property(job, QDMI_DEVICE_JOB_PROPERTY_CUSTOM2,
+                                                     sizeof(size_t), &simType, &size_ret),
+              QDMI_SUCCESS);
+    EXPECT_EQ(size_ret, sizeof(size_t));
+    EXPECT_EQ(MAESTRO_QDMI_device_job_query_property(job, QDMI_DEVICE_JOB_PROPERTY_CUSTOM3,
+                                                     sizeof(size_t), &simExecType, &size_ret),
+              QDMI_SUCCESS);
+    EXPECT_EQ(size_ret, sizeof(size_t));
+    EXPECT_EQ(MAESTRO_QDMI_device_job_query_property(job, QDMI_DEVICE_JOB_PROPERTY_CUSTOM4,
+                                                     sizeof(size_t), &maxBondDim, &size_ret),
+              QDMI_SUCCESS);
     EXPECT_EQ(size_ret, sizeof(size_t));
 
-	EXPECT_EQ(num_qubits, 2);
-	EXPECT_EQ(simType, 1);
-	EXPECT_EQ(simExecType, 1);
-	EXPECT_EQ(maxBondDim, 2);
+    EXPECT_EQ(num_qubits, 2);
+    EXPECT_EQ(simType, 1);
+    EXPECT_EQ(simExecType, 1);
+    EXPECT_EQ(maxBondDim, 2);
 
-    std::string program =
-        "qreg q[2];\n"
-        "creg c[2];\n"
-        "x q[0];\n"
-        "cx q[0],q[1];\n"
-        "measure q -> c;\n";
+    std::string program = "qreg q[2];\n"
+                          "creg c[2];\n"
+                          "x q[0];\n"
+                          "cx q[0],q[1];\n"
+                          "measure q -> c;\n";
 
-    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_PROGRAM, program.length(), program.c_str()), QDMI_SUCCESS);
+    EXPECT_EQ(MAESTRO_QDMI_device_job_set_parameter(job, QDMI_DEVICE_JOB_PARAMETER_PROGRAM,
+                                                    program.length(), program.c_str()),
+              QDMI_SUCCESS);
 
     ASSERT_EQ(MAESTRO_QDMI_device_job_submit(job), QDMI_SUCCESS);
 
@@ -328,12 +358,16 @@ TEST_F(QDMIImplementationTest, JobExecutionWithParams) {
 
     char keys_buffer[3];
     size_t result_size = sizeof(keys_buffer);
-    EXPECT_EQ(MAESTRO_QDMI_device_job_get_results(job, QDMI_JOB_RESULT_HIST_KEYS, result_size, keys_buffer, &result_size), QDMI_SUCCESS);
+    EXPECT_EQ(MAESTRO_QDMI_device_job_get_results(job, QDMI_JOB_RESULT_HIST_KEYS, result_size,
+                                                  keys_buffer, &result_size),
+              QDMI_SUCCESS);
     EXPECT_EQ(result_size, 3); // 2 bits + null terminator
     EXPECT_STREQ(keys_buffer, "11");
 
     size_t counts = 0;
-    EXPECT_EQ(MAESTRO_QDMI_device_job_get_results(job, QDMI_JOB_RESULT_HIST_VALUES, sizeof(size_t), &counts, &result_size), QDMI_SUCCESS);
+    EXPECT_EQ(MAESTRO_QDMI_device_job_get_results(job, QDMI_JOB_RESULT_HIST_VALUES, sizeof(size_t),
+                                                  &counts, &result_size),
+              QDMI_SUCCESS);
     EXPECT_EQ(result_size, sizeof(size_t));
     EXPECT_EQ(counts, 100);
 
