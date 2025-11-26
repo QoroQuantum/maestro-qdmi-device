@@ -206,7 +206,13 @@ struct MAESTRO_QDMI_Device_State
     void Run()
     {
         SimpleSimulator simulator;
-        if (!simulator.Init("maestro.so")) {
+        if (!simulator.Init(
+#if defined(_WIN32)
+		"maestro.dll"
+#else
+		"maestro.so"
+#endif
+		)) {
             std::unique_lock lock(simulator_mutex);
             status = QDMI_DEVICE_STATUS_OFFLINE;
             return;
