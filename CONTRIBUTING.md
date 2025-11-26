@@ -207,7 +207,7 @@ We welcome feature requests! Please:
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the Apache License 2.0, the same license as the project.
+By contributing, you agree that your contributions will be licensed under the GNU General Public License v3.0, the same license as the project.
 
 ---
 

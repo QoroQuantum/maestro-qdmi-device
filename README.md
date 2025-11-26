@@ -127,7 +127,7 @@ maestro-qdmi-device/
 │   └── test_maestro_device.cpp
 ├── cmake/                  # CMake modules
 ├── CMakeLists.txt         # Main CMake configuration
-├── LICENSE                # Apache 2.0 License
+├── LICENSE                # GPLv3 License
 └── README.md             # This file
 ```
 
@@ -142,7 +142,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
 Copyright 2025 Qoro Quantum Ltd.
 
