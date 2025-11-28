@@ -671,7 +671,8 @@ int MAESTRO_QDMI_device_session_set_parameter(MAESTRO_QDMI_Device_Session sessio
          param != QDMI_DEVICE_SESSION_PARAMETER_CUSTOM5)) {
         return QDMI_ERROR_INVALIDARGUMENT;
     }
-    if (session->status != MAESTRO_QDMI_DEVICE_SESSION_STATUS::ALLOCATED) {
+    if (session->status != MAESTRO_QDMI_DEVICE_SESSION_STATUS::ALLOCATED && 
+        session->status != MAESTRO_QDMI_DEVICE_SESSION_STATUS::INITIALIZED) {
         return QDMI_ERROR_BADSTATE;
     }
     if (param != QDMI_DEVICE_SESSION_PARAMETER_TOKEN &&

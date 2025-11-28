@@ -31,7 +31,7 @@ generate_device_defs_executable(${QDMI_PREFIX})
 # ------------------------------------------------------------------------------
 
 # create an executable in which the tests will be stored
-add_executable(maestro_device_test test_maestro_device.cpp)
+add_executable(maestro_device_test test_maestro_device.cpp maestro_backend_tests.cpp)
 
 # link the Google test infrastructure to the test executable.
 target_link_libraries(maestro_device_test PRIVATE gtest_main qdmi::qdmi maestro_device
