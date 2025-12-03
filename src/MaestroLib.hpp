@@ -219,10 +219,15 @@ public:
     static void CheckFunction(void* func, int line)
     {
         if (!func) {
-            std::cout << "GpuLibrary: Unable to load function, line #: " << std::to_string(line);
+            std::cout << "MaestroLibrary: Unable to load function, line #: " << std::to_string(line);
+#ifdef __linux__
             const char* dlsym_error = dlerror();
             if (dlsym_error)
                 std::cout << ", error: " << dlsym_error;
+#elif defined(_WIN32)
+            const DWORD error = GetLastError();
+            std::cout << ", error code: " << error;
+#endif
 
             std::cout << std::endl;
         }
