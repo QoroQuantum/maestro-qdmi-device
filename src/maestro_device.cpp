@@ -288,7 +288,7 @@ struct MAESTRO_QDMI_Device_State
                 // if it's not deleted while running
                 if (current_job) {
                     current_job->ParseResults(result);
-                    current_job->status = QDMI_JOB_STATUS_DONE;
+                    current_job->status = result.empty() ? QDMI_JOB_STATUS_FAILED : QDMI_JOB_STATUS_DONE;
                     current_job = nullptr;
                 }
 
