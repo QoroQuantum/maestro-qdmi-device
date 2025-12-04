@@ -113,12 +113,14 @@ struct MAESTRO_QDMI_Device_Job_impl_d
     // very dumb json parser, but we know exactly what to expect
     void ParseResults(const std::string& res)
     {
+        results.clear();
+		if (res.empty())
+            return;
+        
         // we care only about 'counts' for now
         auto pos = res.find("\"counts\":");
         if (pos == std::string::npos)
             return;
-
-        results.clear();
 
         pos += 9;
         while (pos < res.length() && res[pos] != '{')
@@ -276,8 +278,10 @@ struct MAESTRO_QDMI_Device_State
                     // std::cerr << "Executing program:\n" << program << "\nWith config:\n" <<
                     // config << "\n";
                     char* res = simulator.SimpleExecute(program.c_str(), config.c_str());
-                    result = res;
-                    simulator.FreeResult(res);
+                    if (res) {
+                        result = res;
+                        simulator.FreeResult(res);
+                    }
                 }
 
                 lock.lock();
