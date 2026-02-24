@@ -167,9 +167,9 @@ struct MAESTRO_QDMI_Device_Job_impl_d
     size_t num_shots = 1;
     size_t qubits_num = 64;
 
-    size_t simType = 0; // 0 - aer, 1 - qcsim, 2 - composite aer, 3 - composite qcsim, 4 - gpu, any
+    size_t simType = 0; // 0 - aer, 1 - qcsim, 2 - composite aer, 3 - composite qcsim, 4 - gpu, 5 - quest, any
                         // other value = whatever, auto if available
-    size_t simExecType = 0; // 0 - statevector, 1 - mps, 2 - stabilizer, 3 - tensor network, any
+    size_t simExecType = 0; // 0 - statevector, 1 - mps, 2 - stabilizer, 3 - tensor network, 4 - pauli propagation, any
                             // other value = whatever, auto if available
     size_t maxBondDim = 0;  // no limit
 
@@ -251,7 +251,7 @@ struct MAESTRO_QDMI_Device_State
 
                 if (simType < 2) // qcsim or aer
                 {
-                    if (simExecType < 4)
+					if (simExecType < 4 || (simType == 1 && simExecType == 4)) // qcsim also supports pauli propagation
                         simulator.RemoveAllOptimizationSimulatorsAndAdd(
                             static_cast<int>(simType), static_cast<int>(simExecType));
                     else {
@@ -265,13 +265,17 @@ struct MAESTRO_QDMI_Device_State
                     simulator.RemoveAllOptimizationSimulatorsAndAdd(static_cast<int>(simType), 0);
                 } else if (simType == 4) // gpu
                 {
-                    if (simExecType < 2) // statevector or mps
+                    if (simExecType < 2 || simExecType == 3 || simExecType == 4) // statevector, mps, tensor network or pauli propagation
                         simulator.RemoveAllOptimizationSimulatorsAndAdd(
                             static_cast<int>(simType), static_cast<int>(simExecType));
                     else // other types are not supported yet on gpu, set statevector
                         simulator.RemoveAllOptimizationSimulatorsAndAdd(static_cast<int>(simType),
                                                                         0);
-                }
+                } else if (simType == 5) // quest
+                {
+					// only statevector for now
+                    simulator.RemoveAllOptimizationSimulatorsAndAdd(static_cast<int>(simType), 0);
+				}
 
                 std::string result;
                 if (!program.empty()) {
