@@ -15,7 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 # ------------------------------------------------------------------------------
 add_library(maestro_device SHARED maestro_device.cpp)
-target_link_libraries(maestro_device PRIVATE qdmi::qdmi qdmi::project_warnings)
+target_link_libraries(maestro_device PRIVATE qdmi::qdmi qdmi::qdmi_project_warnings)
 generate_prefixed_qdmi_headers(${QDMI_PREFIX})
 target_include_directories(maestro_device PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/include)
 if(NOT CXX_DEVICE)

@@ -35,7 +35,7 @@ add_executable(maestro_device_test test_maestro_device.cpp maestro_backend_tests
 
 # link the Google test infrastructure to the test executable.
 target_link_libraries(maestro_device_test PRIVATE gtest_main qdmi::qdmi maestro_device
-                                             qdmi::project_warnings)
+                                             qdmi::qdmi_project_warnings)
 
 # set c++ standard
 target_compile_features(maestro_device_test PRIVATE cxx_std_17)
